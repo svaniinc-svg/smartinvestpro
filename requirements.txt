@@ -1,5 +1,7 @@
---only-binary=:all:
-numpy==2.3.4
-pandas==2.3.1
-streamlit==1.39.0
-openpyxl==3.1.5
+# Streamlit ROI Calculator Dependencies
+streamlit>=1.28.0
+pandas>=2.0.0
+numpy>=1.24.0
+numpy-financial>=1.0.0
+openpyxl>=3.1.0
+matplotlib>=3.7.0
