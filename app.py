@@ -9,6 +9,12 @@ from openpyxl.styles import Font, PatternFill
 import matplotlib.pyplot as plt
 
 
+import streamlit as st
+st.set_page_config(
+    page_title="Real Estate ROI Calculator",
+    layout="wide",
+    menu_items={"Get Help": None, "Report a bug": None, "About": None}
+)
 
 st.set_page_config(page_title="Real Estate ROI Calculator", layout="wide")
 st.title("🏡 Real Estate ROI Calculator with Multiple Units")
@@ -839,5 +845,6 @@ if st.button("Calculate"):
         file_name="roi_amortization.xlsx",
         mime="application/vnd.openxmlformats-officedocument.spreadsheetml.sheet"
     )
+
 
 
