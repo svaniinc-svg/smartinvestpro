@@ -1,4 +1,6 @@
 --only-binary=:all:
+numpy==1.26.4
+pandas==2.2.2
 streamlit==1.39.0
-
-
+openpyxl==3.1.5
+numpy-financial==1.0.0
