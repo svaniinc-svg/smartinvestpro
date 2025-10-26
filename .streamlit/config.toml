@@ -1,21 +1,11 @@
-[server]
-headless = true
-enableCORS = false
-enableCORS = false
-enableXsrfProtection = false
-
-[theme]
-base = "light"
-primaryColor = "#0F4C81"
-
 [global]
 showWarningOnDirectExecution = false
 
 [browser]
 gatherUsageStats = false
 
-[client]
-showErrorDetails = false
+[server]
+enableCORS = false
 
 [ui]
 hideTopBar = true
