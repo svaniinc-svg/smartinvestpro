@@ -9,6 +9,27 @@ from openpyxl.styles import Font, PatternFill
 import matplotlib.pyplot as plt
 
 st.set_page_config(page_title="Real Estate ROI Calculator", layout="wide")
+
+# Hide Streamlit elements (fork button, menu, footer)
+hide_streamlit_style = """
+<style>
+#MainMenu {visibility: hidden;}
+footer {visibility: hidden;}
+header {visibility: hidden;}
+.stActionButton {display: none;}
+div[data-testid="stToolbar"] {visibility: hidden;}
+div[data-testid="stDecoration"] {visibility: hidden;}
+div[data-testid="stStatusWidget"] {visibility: hidden;}
+.reportview-container .main footer {visibility: hidden;}
+.stDeployButton {display: none;}
+#stDecoration {display: none;}
+[data-testid="stToolbar"] {display: none !important;}
+[data-testid="stDecoration"] {display: none !important;}
+[data-testid="stStatusWidget"] {display: none !important;}
+</style>
+"""
+st.markdown(hide_streamlit_style, unsafe_allow_html=True)
+
 st.title("🏡 Real Estate ROI Calculator with Multiple Units")
 
 # -------------------------
@@ -384,8 +405,8 @@ def calculate_metrics(purchase_price, down_payment, annual_rate, years,
         "NOI (annual, Yr1 levels)": noi,
         "Annual Debt Service (Yr1)": annual_debt_y1,
         "Annual Cash Flow (Yr1)": annual_cash_flow_y1,
-        "Annual Debt Service (Yr2)": annual_debt_y2 if nper > 12 else None,
-        "Annual Cash Flow (Yr2)": annual_cash_flow_y2 if nper > 12 else None,
+        "Annual Debt Service (Yr2)": annual_debt_y2 if (nper > 12 and use_buydown_2_1) else None,
+        "Annual Cash Flow (Yr2)": annual_cash_flow_y2 if (nper > 12 and use_buydown_2_1) else None,
         "Cap Rate": (noi / purchase_price) if purchase_price else None,
         "Cash on Cash Return (Yr1)": (annual_cash_flow_y1 / initial_investment) if initial_investment > 0 else None,
         "DCR (Yr1)": dcr_y1,
@@ -597,7 +618,7 @@ with col1:
     st.markdown(f"**Loan Amount:** ${purchase_price - down_payment:,.2f}")
 
 with col2:
-    interest_rate_pct = st.number_input("Interest Rate (annual %)", value=6.5, min_value=0.0, step=0.01)
+    interest_rate_pct = st.number_input("Interest Rate (annual %)", value=6.5, min_value=0.0, step=0.001, format="%.3f")
     loan_term_years = st.number_input("Loan Term (years)", value=30, min_value=0, step=1)
     override_payment = st.number_input("Monthly Loan Payment (optional)", value=0.0, min_value=0.0, step=50.0)
     use_buydown_2_1 = st.checkbox("Use 2/1 Buydown (Yr1 = note%-2, Yr2 = note%-1)")
@@ -748,6 +769,121 @@ if st.button("Calculate"):
         "Number of Units": num_units,
         "Monthly Rent Total": monthly_rent
     }
+
+    # --- Key Performance Tiles ---
+    st.subheader("🎯 Key Performance Indicators")
+    
+    if use_buydown_2_1:
+        # Show Year 1 and Year 2 side by side for buydown
+        col1, col2, col3, col4 = st.columns(4)
+        
+        with col1:
+            noi_val = metrics.get("NOI (annual, Yr1 levels)", 0)
+            noi_color = "normal" if noi_val > 0 else "inverse"
+            st.metric(
+                label="📈 Annual NOI (Yr1)",
+                value=f"${noi_val:,.0f}",
+                delta=None
+            )
+            
+        with col2:
+            cashflow_val = metrics.get("Annual Cash Flow (Yr1)", 0)
+            cashflow_delta = "Positive" if cashflow_val > 0 else "Negative" if cashflow_val < 0 else "Break-even"
+            cashflow_color = "normal" if cashflow_val >= 0 else "inverse"
+            st.metric(
+                label="💰 Cash Flow (Yr1)",
+                value=f"${cashflow_val:,.0f}",
+                delta=cashflow_delta,
+                delta_color=cashflow_color
+            )
+            
+        with col3:
+            cashflow_yr2_val = metrics.get("Annual Cash Flow (Yr2)", 0)
+            if cashflow_yr2_val is not None:
+                cashflow_yr2_delta = "Positive" if cashflow_yr2_val > 0 else "Negative" if cashflow_yr2_val < 0 else "Break-even"
+                cashflow_yr2_color = "normal" if cashflow_yr2_val >= 0 else "inverse"
+                st.metric(
+                    label="💰 Cash Flow (Yr2)",
+                    value=f"${cashflow_yr2_val:,.0f}",
+                    delta=cashflow_yr2_delta,
+                    delta_color=cashflow_yr2_color
+                )
+            else:
+                st.metric(
+                    label="💰 Cash Flow (Yr2)",
+                    value="N/A"
+                )
+            
+        with col4:
+            dcr_val = metrics.get("DCR (Yr1)", 0)
+            if dcr_val and dcr_val > 0:
+                if dcr_val >= 1.25:
+                    dcr_status = "Excellent"
+                    dcr_color = "normal"
+                elif dcr_val >= 1.0:
+                    dcr_status = "Good"
+                    dcr_color = "normal"
+                else:
+                    dcr_status = "Risky"
+                    dcr_color = "inverse"
+            else:
+                dcr_status = "N/A"
+                dcr_color = "off"
+                
+            st.metric(
+                label="🏦 Debt Coverage Ratio",
+                value=f"{dcr_val:.2f}" if dcr_val else "N/A",
+                delta=dcr_status,
+                delta_color=dcr_color
+            )
+    else:
+        # Standard 3-column layout for non-buydown
+        col1, col2, col3 = st.columns(3)
+        
+        with col1:
+            noi_val = metrics.get("NOI (annual, Yr1 levels)", 0)
+            noi_color = "normal" if noi_val > 0 else "inverse"
+            st.metric(
+                label="📈 Annual NOI (Yr1)",
+                value=f"${noi_val:,.0f}",
+                delta=None
+            )
+            
+        with col2:
+            cashflow_val = metrics.get("Annual Cash Flow (Yr1)", 0)
+            cashflow_delta = "Positive" if cashflow_val > 0 else "Negative" if cashflow_val < 0 else "Break-even"
+            cashflow_color = "normal" if cashflow_val >= 0 else "inverse"
+            st.metric(
+                label="💰 Annual Cash Flow (Yr1)",
+                value=f"${cashflow_val:,.0f}",
+                delta=cashflow_delta,
+                delta_color=cashflow_color
+            )
+            
+        with col3:
+            dcr_val = metrics.get("DCR (Yr1)", 0)
+            if dcr_val and dcr_val > 0:
+                if dcr_val >= 1.25:
+                    dcr_status = "Excellent"
+                    dcr_color = "normal"
+                elif dcr_val >= 1.0:
+                    dcr_status = "Good"
+                    dcr_color = "normal"
+                else:
+                    dcr_status = "Risky"
+                    dcr_color = "inverse"
+            else:
+                dcr_status = "N/A"
+                dcr_color = "off"
+                
+            st.metric(
+                label="🏦 Debt Coverage Ratio",
+                value=f"{dcr_val:.2f}" if dcr_val else "N/A",
+                delta=dcr_status,
+                delta_color=dcr_color
+            )
+    
+    st.divider()
 
     # --- Key Metrics (vertical) ---
     st.subheader("📊 Key Metrics & Predictions (Vertical)")
