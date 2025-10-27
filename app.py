@@ -391,26 +391,31 @@ def calculate_metrics(purchase_price, down_payment, annual_rate, years,
         hold_irr = _irr_stable(np.array(cash_flows_hold))
     hold_irr_annual = _annualize_from_monthly(hold_irr)
 
+    # Dynamic labels based on buydown selection
+    borrower_payment_label_y1 = "Borrower Payment (Yr1)" if use_buydown_2_1 else "Borrower Payment"
+    borrower_payment_label_y2 = "Borrower Payment (Yr2)" if use_buydown_2_1 else None
+    effective_rate_label_y1 = "Effective Rate (Yr1)" if use_buydown_2_1 else "Effective Rate"
+    effective_rate_label_y2 = "Effective Rate (Yr2)" if use_buydown_2_1 else None
+    annual_debt_label_y1 = "Annual Debt Service (Yr1)" if use_buydown_2_1 else "Annual Debt Service"
+    annual_debt_label_y2 = "Annual Debt Service (Yr2)" if use_buydown_2_1 else None
+    annual_cashflow_label_y1 = "Annual Cash Flow (Yr1)" if use_buydown_2_1 else "Annual Cash Flow"
+    annual_cashflow_label_y2 = "Annual Cash Flow (Yr2)" if use_buydown_2_1 else None
+    dcr_label_y1 = "DCR (Yr1)" if use_buydown_2_1 else "DCR"
+    break_even_label_y1 = "Break-Even Occupancy % (Yr1)" if use_buydown_2_1 else "Break-Even Occupancy %"
+    cash_on_cash_label_y1 = "Cash on Cash Return (Yr1)" if use_buydown_2_1 else "Cash on Cash Return"
+
     metrics = {
         "Loan Amount": loan_amount,
         "Monthly Payment (Note Rate)": monthly_note_payment,
-        "Borrower Payment (Yr1)": borrower_pmt_y1 if use_buydown_2_1 else monthly_note_payment,
-        "Borrower Payment (Yr2)": borrower_pmt_y2 if use_buydown_2_1 else monthly_note_payment,
-        "Effective Rate (Yr1)": eff_rate_y1 if use_buydown_2_1 else annual_rate,
-        "Effective Rate (Yr2)": eff_rate_y2 if use_buydown_2_1 else annual_rate,
-        "Buydown Subsidy (Yr1)": subsidy_y1 if use_buydown_2_1 else 0.0,
-        "Buydown Subsidy (Yr2)": subsidy_y2 if use_buydown_2_1 else 0.0,
-        "Buydown Subsidy (Total 2 yrs)": subsidy_total if use_buydown_2_1 else 0.0,
-        "Buydown Paid By": buydown_paid_by if use_buydown_2_1 else "N/A",
+        borrower_payment_label_y1: borrower_pmt_y1 if use_buydown_2_1 else monthly_note_payment,
+        effective_rate_label_y1: eff_rate_y1 if use_buydown_2_1 else annual_rate,
+        annual_debt_label_y1: annual_debt_y1,
+        annual_cashflow_label_y1: annual_cash_flow_y1,
+        dcr_label_y1: dcr_y1,
+        cash_on_cash_label_y1: (annual_cash_flow_y1 / initial_investment) if initial_investment > 0 else None,
+        break_even_label_y1: break_even_occ,    # fraction (0-1+)
         "NOI (annual, Yr1 levels)": noi,
-        "Annual Debt Service (Yr1)": annual_debt_y1,
-        "Annual Cash Flow (Yr1)": annual_cash_flow_y1,
-        "Annual Debt Service (Yr2)": annual_debt_y2 if (nper > 12 and use_buydown_2_1) else None,
-        "Annual Cash Flow (Yr2)": annual_cash_flow_y2 if (nper > 12 and use_buydown_2_1) else None,
         "Cap Rate": (noi / purchase_price) if purchase_price else None,
-        "Cash on Cash Return (Yr1)": (annual_cash_flow_y1 / initial_investment) if initial_investment > 0 else None,
-        "DCR (Yr1)": dcr_y1,
-        "Break-Even Occupancy % (Yr1)": break_even_occ,    # fraction (0-1+)
         "Annual IRR (term sale)": annual_irr_term,
         "Hold Period (years)": hold_years,
         "Sale Price (hold)": sale_price,
@@ -424,6 +429,18 @@ def calculate_metrics(purchase_price, down_payment, annual_rate, years,
         "Initial Investment (cash)": initial_investment,
         "Buy Closing Costs Paid By": buy_cc_paid_by,
     }
+    
+    # Add Year 2 buydown-specific metrics if applicable
+    if use_buydown_2_1 and nper > 12:
+        metrics[borrower_payment_label_y2] = borrower_pmt_y2
+        metrics[effective_rate_label_y2] = eff_rate_y2
+        metrics[annual_debt_label_y2] = annual_debt_y2
+        metrics[annual_cashflow_label_y2] = annual_cash_flow_y2
+        metrics["Buydown Subsidy (Yr1)"] = subsidy_y1
+        metrics["Buydown Subsidy (Yr2)"] = subsidy_y2
+        metrics["Buydown Subsidy (Total 2 yrs)"] = subsidy_total
+        metrics["Buydown Paid By"] = buydown_paid_by
+    
     return metrics, amort, yearly_cf_df
 
 # -------------------------
@@ -774,8 +791,8 @@ if st.button("Calculate"):
     st.subheader("🎯 Key Performance Indicators")
     
     if use_buydown_2_1:
-        # Show Year 1 and Year 2 side by side for buydown
-        col1, col2, col3, col4 = st.columns(4)
+        # Show Year 1 and Year 2 side by side for buydown (5 columns)
+        col1, col2, col3, col4, col5 = st.columns(5)
         
         with col1:
             noi_val = metrics.get("NOI (annual, Yr1 levels)", 0)
@@ -787,7 +804,9 @@ if st.button("Calculate"):
             )
             
         with col2:
-            cashflow_val = metrics.get("Annual Cash Flow (Yr1)", 0)
+            # Use dynamic label to get the right cash flow metric
+            cashflow_key = "Annual Cash Flow (Yr1)" if use_buydown_2_1 else "Annual Cash Flow"
+            cashflow_val = metrics.get(cashflow_key, 0)
             cashflow_delta = "Positive" if cashflow_val > 0 else "Negative" if cashflow_val < 0 else "Break-even"
             cashflow_color = "normal" if cashflow_val >= 0 else "inverse"
             st.metric(
@@ -815,7 +834,9 @@ if st.button("Calculate"):
                 )
             
         with col4:
-            dcr_val = metrics.get("DCR (Yr1)", 0)
+            # Use dynamic label to get the right DCR metric
+            dcr_key = "DCR (Yr1)" if use_buydown_2_1 else "DCR"
+            dcr_val = metrics.get(dcr_key, 0)
             if dcr_val and dcr_val > 0:
                 if dcr_val >= 1.25:
                     dcr_status = "Excellent"
@@ -836,9 +857,35 @@ if st.button("Calculate"):
                 delta=dcr_status,
                 delta_color=dcr_color
             )
+            
+        with col5:
+            # Cap Rate tile
+            cap_rate_val = metrics.get("Cap Rate", 0)
+            if cap_rate_val and cap_rate_val > 0:
+                cap_rate_pct = cap_rate_val * 100  # Convert to percentage
+                if cap_rate_pct >= 8.0:
+                    cap_status = "Strong"
+                    cap_color = "normal"
+                elif cap_rate_pct >= 5.0:
+                    cap_status = "Good"
+                    cap_color = "normal"
+                else:
+                    cap_status = "Low"
+                    cap_color = "inverse"
+            else:
+                cap_rate_pct = 0
+                cap_status = "N/A"
+                cap_color = "off"
+                
+            st.metric(
+                label="🎯 Cap Rate",
+                value=f"{cap_rate_pct:.2f}%" if cap_rate_val else "N/A",
+                delta=cap_status,
+                delta_color=cap_color
+            )
     else:
-        # Standard 3-column layout for non-buydown
-        col1, col2, col3 = st.columns(3)
+        # Standard 4-column layout for non-buydown (including Cap Rate)
+        col1, col2, col3, col4 = st.columns(4)
         
         with col1:
             noi_val = metrics.get("NOI (annual, Yr1 levels)", 0)
@@ -850,18 +897,22 @@ if st.button("Calculate"):
             )
             
         with col2:
-            cashflow_val = metrics.get("Annual Cash Flow (Yr1)", 0)
+            # Use dynamic label to get the right cash flow metric
+            cashflow_key = "Annual Cash Flow"  # Generic when not buydown
+            cashflow_val = metrics.get(cashflow_key, 0)
             cashflow_delta = "Positive" if cashflow_val > 0 else "Negative" if cashflow_val < 0 else "Break-even"
             cashflow_color = "normal" if cashflow_val >= 0 else "inverse"
             st.metric(
-                label="💰 Annual Cash Flow (Yr1)",
+                label="💰 Annual Cash Flow",
                 value=f"${cashflow_val:,.0f}",
                 delta=cashflow_delta,
                 delta_color=cashflow_color
             )
             
         with col3:
-            dcr_val = metrics.get("DCR (Yr1)", 0)
+            # Use dynamic label to get the right DCR metric
+            dcr_key = "DCR"  # Generic when not buydown
+            dcr_val = metrics.get(dcr_key, 0)
             if dcr_val and dcr_val > 0:
                 if dcr_val >= 1.25:
                     dcr_status = "Excellent"
@@ -882,6 +933,32 @@ if st.button("Calculate"):
                 delta=dcr_status,
                 delta_color=dcr_color
             )
+            
+        with col4:
+            # Cap Rate tile
+            cap_rate_val = metrics.get("Cap Rate", 0)
+            if cap_rate_val and cap_rate_val > 0:
+                cap_rate_pct = cap_rate_val * 100  # Convert to percentage
+                if cap_rate_pct >= 8.0:
+                    cap_status = "Strong"
+                    cap_color = "normal"
+                elif cap_rate_pct >= 5.0:
+                    cap_status = "Good"
+                    cap_color = "normal"
+                else:
+                    cap_status = "Low"
+                    cap_color = "inverse"
+            else:
+                cap_rate_pct = 0
+                cap_status = "N/A"
+                cap_color = "off"
+                
+            st.metric(
+                label="🎯 Cap Rate",
+                value=f"{cap_rate_pct:.2f}%" if cap_rate_val else "N/A",
+                delta=cap_status,
+                delta_color=cap_color
+            )
     
     st.divider()
 
@@ -890,14 +967,21 @@ if st.button("Calculate"):
     display_rows = []
     red_metrics = set()
 
-    dcr_val = metrics.get("DCR (Yr1)")
+    # Use dynamic labels for red metrics detection
+    dcr_key = "DCR (Yr1)" if use_buydown_2_1 else "DCR"
+    dcr_val = metrics.get(dcr_key)
     if isinstance(dcr_val, (int, float)) and dcr_val < 1.0:
-        red_metrics.add("DCR (Yr1)")
-    be_val = metrics.get("Break-Even Occupancy % (Yr1)")
+        red_metrics.add(dcr_key)
+    
+    be_key = "Break-Even Occupancy % (Yr1)" if use_buydown_2_1 else "Break-Even Occupancy %"
+    be_val = metrics.get(be_key)
     if isinstance(be_val, (int, float)) and be_val > 1.0:
-        red_metrics.add("Break-Even Occupancy % (Yr1)")
+        red_metrics.add(be_key)
 
     for k, v in metrics.items():
+        # Skip None values - don't add them to the display
+        if v is None:
+            continue
         if isinstance(v, (int, float)) and v < 0:
             red_metrics.add(k)
         display_rows.append({"Metric": k, "Value": _fmt_metric(k, v)})
@@ -973,3 +1057,13 @@ if st.button("Calculate"):
         file_name="roi_amortization.xlsx",
         mime="application/vnd.openxmlformats-officedocument.spreadsheetml.sheet"
     )
+
+# --- Disclaimer Footnote ---
+st.divider()
+st.markdown("""
+<div style='text-align: center; color: #666; font-size: 0.9em; padding: 15px; border: 1px solid #ddd; background-color: #f9f9f9; margin: 10px;'>
+    <strong>⚠️ DISCLAIMER:</strong> This calculator is for educational purposes only and provides estimates that may vary significantly from actual results. 
+    Always consult qualified financial, legal, and real estate professionals before making investment decisions. 
+    Not liable for any damages from use of this tool.
+</div>
+""", unsafe_allow_html=True)
