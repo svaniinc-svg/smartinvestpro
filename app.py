@@ -409,13 +409,8 @@ def calculate_metrics(purchase_price, down_payment, annual_rate, years,
         "Monthly Payment (Note Rate)": monthly_note_payment,
         borrower_payment_label_y1: borrower_pmt_y1 if use_buydown_2_1 else monthly_note_payment,
         effective_rate_label_y1: eff_rate_y1 if use_buydown_2_1 else annual_rate,
-        annual_debt_label_y1: annual_debt_y1,
-        annual_cashflow_label_y1: annual_cash_flow_y1,
-        dcr_label_y1: dcr_y1,
         cash_on_cash_label_y1: (annual_cash_flow_y1 / initial_investment) if initial_investment > 0 else None,
         break_even_label_y1: break_even_occ,    # fraction (0-1+)
-        "NOI (annual, Yr1 levels)": noi,
-        "Cap Rate": (noi / purchase_price) if purchase_price else None,
         "Annual IRR (term sale)": annual_irr_term,
         "Hold Period (years)": hold_years,
         "Sale Price (hold)": sale_price,
@@ -428,18 +423,23 @@ def calculate_metrics(purchase_price, down_payment, annual_rate, years,
         "IRR (hold period)": hold_irr_annual,
         "Initial Investment (cash)": initial_investment,
         "Buy Closing Costs Paid By": buy_cc_paid_by,
+        # KPI-only metrics (will be filtered out of main table)
+        "NOI (annual, Yr1 levels)": noi,
+        "Cap Rate": (noi / purchase_price) if purchase_price else None,
+        "DCR": dcr_y1,
+        "Cash Flow (Yr1)": annual_cash_flow_y1,
     }
     
     # Add Year 2 buydown-specific metrics if applicable
     if use_buydown_2_1 and nper > 12:
         metrics[borrower_payment_label_y2] = borrower_pmt_y2
         metrics[effective_rate_label_y2] = eff_rate_y2
-        metrics[annual_debt_label_y2] = annual_debt_y2
-        metrics[annual_cashflow_label_y2] = annual_cash_flow_y2
         metrics["Buydown Subsidy (Yr1)"] = subsidy_y1
         metrics["Buydown Subsidy (Yr2)"] = subsidy_y2
         metrics["Buydown Subsidy (Total 2 yrs)"] = subsidy_total
         metrics["Buydown Paid By"] = buydown_paid_by
+        # KPI-only Year 2 metrics
+        metrics["Cash Flow (Yr2)"] = annual_cash_flow_y2
     
     return metrics, amort, yearly_cf_df
 
@@ -795,8 +795,7 @@ if st.button("Calculate"):
         col1, col2, col3, col4, col5 = st.columns(5)
         
         with col1:
-            noi_val = metrics.get("NOI (annual, Yr1 levels)", 0)
-            noi_color = "normal" if noi_val > 0 else "inverse"
+            noi_val = metrics.get("NOI (annual, Yr1 levels)", 0)  # Keep NOI in metrics for KPI access
             st.metric(
                 label="📈 Annual NOI (Yr1)",
                 value=f"${noi_val:,.0f}",
@@ -804,9 +803,7 @@ if st.button("Calculate"):
             )
             
         with col2:
-            # Use dynamic label to get the right cash flow metric
-            cashflow_key = "Annual Cash Flow (Yr1)" if use_buydown_2_1 else "Annual Cash Flow"
-            cashflow_val = metrics.get(cashflow_key, 0)
+            cashflow_val = metrics.get("Cash Flow (Yr1)", 0)  # Use direct key for KPI access
             cashflow_delta = "Positive" if cashflow_val > 0 else "Negative" if cashflow_val < 0 else "Break-even"
             cashflow_color = "normal" if cashflow_val >= 0 else "inverse"
             st.metric(
@@ -817,7 +814,7 @@ if st.button("Calculate"):
             )
             
         with col3:
-            cashflow_yr2_val = metrics.get("Annual Cash Flow (Yr2)", 0)
+            cashflow_yr2_val = metrics.get("Cash Flow (Yr2)", 0)
             if cashflow_yr2_val is not None:
                 cashflow_yr2_delta = "Positive" if cashflow_yr2_val > 0 else "Negative" if cashflow_yr2_val < 0 else "Break-even"
                 cashflow_yr2_color = "normal" if cashflow_yr2_val >= 0 else "inverse"
@@ -897,9 +894,8 @@ if st.button("Calculate"):
             )
             
         with col2:
-            # Use dynamic label to get the right cash flow metric
-            cashflow_key = "Annual Cash Flow"  # Generic when not buydown
-            cashflow_val = metrics.get(cashflow_key, 0)
+            # Use KPI key for cash flow
+            cashflow_val = metrics.get("Cash Flow (Yr1)", 0)
             cashflow_delta = "Positive" if cashflow_val > 0 else "Negative" if cashflow_val < 0 else "Break-even"
             cashflow_color = "normal" if cashflow_val >= 0 else "inverse"
             st.metric(
@@ -962,37 +958,79 @@ if st.button("Calculate"):
     
     st.divider()
 
-    # --- Key Metrics (vertical) ---
-    st.subheader("📊 Key Metrics & Predictions (Vertical)")
+    # --- Key Metrics ---
+    st.subheader("📊 Key Metrics & Predictions")
     display_rows = []
     red_metrics = set()
 
     # Use dynamic labels for red metrics detection
-    dcr_key = "DCR (Yr1)" if use_buydown_2_1 else "DCR"
-    dcr_val = metrics.get(dcr_key)
-    if isinstance(dcr_val, (int, float)) and dcr_val < 1.0:
-        red_metrics.add(dcr_key)
-    
     be_key = "Break-Even Occupancy % (Yr1)" if use_buydown_2_1 else "Break-Even Occupancy %"
     be_val = metrics.get(be_key)
     if isinstance(be_val, (int, float)) and be_val > 1.0:
         red_metrics.add(be_key)
 
+    # KPI-only metrics to exclude from main table
+    kpi_only_metrics = {
+        "NOI (annual, Yr1 levels)", "Cap Rate", "DCR", 
+        "Cash Flow (Yr1)", "Cash Flow (Yr2)"
+    }
+    
+    # Investment analysis metrics to display separately
+    investment_analysis_metrics = {
+        "Annual IRR (term sale)"
+    }
+    
+    # Prediction metrics for future projections
+    prediction_metrics = {
+        "Hold Period (years)", "Sale Price (hold)", "Loan Balance at Hold",
+        "Net Sale Proceeds", "Total Cash Flow (hold)", "Equity at Hold",
+        "Total Profit (hold)", "ROI (hold period)", "IRR (hold period)",
+        "Initial Investment (cash)", "Buy Closing Costs Paid By"
+    }
+
+    # Main metrics for the primary table
+    main_display_rows = []
+    investment_display_rows = []
+    prediction_display_rows = []
+
     for k, v in metrics.items():
         # Skip None values - don't add them to the display
         if v is None:
             continue
+        # Skip KPI-only metrics from main table
+        if k in kpi_only_metrics:
+            continue
+            
         if isinstance(v, (int, float)) and v < 0:
             red_metrics.add(k)
-        display_rows.append({"Metric": k, "Value": _fmt_metric(k, v)})
-    display_df = pd.DataFrame(display_rows, columns=["Metric", "Value"])
+            
+        # Split into main vs investment analysis vs predictions
+        if k in prediction_metrics:
+            prediction_display_rows.append({"Metric": k, "Value": _fmt_metric(k, v)})
+        elif k in investment_analysis_metrics:
+            investment_display_rows.append({"Metric": k, "Value": _fmt_metric(k, v)})
+        else:
+            main_display_rows.append({"Metric": k, "Value": _fmt_metric(k, v)})
+            
+    main_display_df = pd.DataFrame(main_display_rows, columns=["Metric", "Value"])
+    investment_display_df = pd.DataFrame(investment_display_rows, columns=["Metric", "Value"])
+    prediction_display_df = pd.DataFrame(prediction_display_rows, columns=["Metric", "Value"])
 
     def _style_metrics_row(row):
         m = row["Metric"]
         val_style = "color:red;" if m in red_metrics else ""
         return ["", val_style]
 
-    st.write(display_df.style.apply(_style_metrics_row, axis=1))
+    st.write(main_display_df.style.apply(_style_metrics_row, axis=1))
+
+    # --- Investment Analysis ---
+    if not investment_display_df.empty:
+        st.subheader("💼 Investment Analysis")
+        st.write(investment_display_df.style.apply(_style_metrics_row, axis=1))
+
+    # --- Future Projections & Hold Period ---
+    st.subheader("🔮 Future Projections & Hold Period")
+    st.write(prediction_display_df.style.apply(_style_metrics_row, axis=1))
 
     # --- Year-by-Year Cashflows (formatted) ---
     st.subheader("📅 Yearly Cashflows (uses Annual Rental Appreciation %)")
