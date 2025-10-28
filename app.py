@@ -30,7 +30,7 @@ div[data-testid="stStatusWidget"] {visibility: hidden;}
 """
 st.markdown(hide_streamlit_style, unsafe_allow_html=True)
 
-st.title("🏡 Real Estate ROI Calculator")
+st.title("🏡 Real Estate ROI Calculator with Multiple Units")
 
 # -------------------------
 # Financial helpers
