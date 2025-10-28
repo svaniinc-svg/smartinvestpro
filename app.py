@@ -1048,7 +1048,7 @@ if st.button("Calculate"):
             .applymap(_style_red_neg, subset=[c for c in yearly_cf.columns if c in YCF_MONEY_COLS])
     )
 
-    # --- DSCR Trend (table + line chart) ---
+    # --- DSCR Trend (table only) ---
     st.subheader("📈 Debt Coverage Ratio (DCR) Trend by Year")
     if not yearly_cf.empty:
         dscr_df = yearly_cf[["Year", "NOI (annual, prorated)", "Debt Service (annual, prorated)"]].copy()
@@ -1064,16 +1064,9 @@ if st.button("Calculate"):
                 "DCR": "{:.2f}"
             })
         )
-        fig, ax = plt.subplots()
-        ax.plot(dscr_df["Year"], dscr_df["DCR"], marker='o')
-        ax.axhline(1.0, linestyle='--')
-        ax.set_xlabel("Year")
-        ax.set_ylabel("DCR")
-        ax.set_title("Debt Coverage Ratio by Year")
-        st.pyplot(fig)
     else:
         dscr_df = pd.DataFrame(columns=["Year", "NOI (annual, prorated)", "Debt Service (annual, prorated)", "DCR"])
-        st.info("No yearly cashflow rows to chart.")
+        st.info("No yearly cashflow rows to display.")
 
     # --- Amortization (formatted) ---
     st.subheader("📑 Amortization Schedule (Borrower vs Note) — first 200 rows")
