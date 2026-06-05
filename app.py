@@ -1253,6 +1253,266 @@ def _seller_lead_section(metrics, purchase_price, monthly_rent, num_units):
             _track_usage("seller_lead_request", extra)
             st.success("Seller lead request saved.")
 
+
+
+# -------------------------
+# Fix & Flip / Fixer Upper helpers
+# -------------------------
+def _safe_div(num, den):
+    try:
+        return num / den if den else None
+    except Exception:
+        return None
+
+
+def calculate_flip_metrics(
+    purchase_price,
+    arv,
+    repair_costs,
+    purchase_closing_costs,
+    holding_months,
+    monthly_holding_costs,
+    selling_closing_costs,
+    selling_commission_pct,
+    lender_points_pct,
+    hard_money_interest_pct,
+    down_payment_pct,
+    contingency_pct,
+    target_profit_pct,
+    rule_of_thumb_pct,
+):
+    repair_contingency = repair_costs * (contingency_pct / 100.0)
+    total_rehab = repair_costs + repair_contingency
+    sale_commission = arv * (selling_commission_pct / 100.0)
+    total_selling_costs = sale_commission + selling_closing_costs
+    total_holding_costs = monthly_holding_costs * holding_months
+
+    loan_amount = max(0.0, purchase_price * (1 - down_payment_pct / 100.0))
+    down_payment = max(0.0, purchase_price - loan_amount)
+    lender_points = loan_amount * (lender_points_pct / 100.0)
+    interest_cost = loan_amount * (hard_money_interest_pct / 100.0) * (holding_months / 12.0)
+    financing_costs = lender_points + interest_cost
+
+    total_project_cost = purchase_price + total_rehab + purchase_closing_costs + total_holding_costs + total_selling_costs + financing_costs
+    total_cash_needed = down_payment + total_rehab + purchase_closing_costs + total_holding_costs + total_selling_costs + financing_costs
+    net_profit = arv - total_project_cost
+    roi_on_cash = _safe_div(net_profit, total_cash_needed)
+    roi_on_cost = _safe_div(net_profit, total_project_cost)
+    profit_margin = _safe_div(net_profit, arv)
+
+    max_offer_rule = (arv * (rule_of_thumb_pct / 100.0)) - total_rehab
+    max_offer_target = arv - total_rehab - purchase_closing_costs - total_holding_costs - total_selling_costs - financing_costs - (arv * (target_profit_pct / 100.0))
+    equity_spread = arv - purchase_price - total_rehab
+
+    return {
+        "ARV / Resale Price": arv,
+        "Purchase Price": purchase_price,
+        "Estimated Repairs": repair_costs,
+        "Repair Contingency": repair_contingency,
+        "Total Rehab Budget": total_rehab,
+        "Purchase Closing Costs": purchase_closing_costs,
+        "Monthly Holding Costs": monthly_holding_costs,
+        "Holding Period (months)": holding_months,
+        "Total Holding Costs": total_holding_costs,
+        "Sale Commission": sale_commission,
+        "Sale Closing Costs": selling_closing_costs,
+        "Total Selling Costs": total_selling_costs,
+        "Loan Amount": loan_amount,
+        "Down Payment": down_payment,
+        "Lender Points": lender_points,
+        "Hard Money Interest Cost": interest_cost,
+        "Total Financing Costs": financing_costs,
+        "Total Project Cost": total_project_cost,
+        "Estimated Cash Needed": total_cash_needed,
+        "Net Profit": net_profit,
+        "ROI on Cash": roi_on_cash,
+        "ROI on Total Cost": roi_on_cost,
+        "Profit Margin": profit_margin,
+        "Equity Spread Before Costs": equity_spread,
+        f"Max Offer ({rule_of_thumb_pct:.0f}% Rule minus rehab)": max_offer_rule,
+        f"Max Offer for {target_profit_pct:.0f}% Profit Margin": max_offer_target,
+    }
+
+
+def flip_metrics_to_xlsx_bytes(inputs: dict, metrics: dict):
+    tmp = BytesIO()
+    with pd.ExcelWriter(tmp, engine="openpyxl") as writer:
+        dict_to_df_rowwise(inputs, "Input").to_excel(writer, sheet_name="Flip Inputs", index=False)
+        dict_to_df_rowwise(metrics, "Metric").to_excel(writer, sheet_name="Flip Metrics", index=False)
+    tmp.seek(0)
+    wb = load_workbook(tmp)
+    currency_fmt = '"$"#,##0.00'
+    percent_fmt = '0.00%'
+    number2_fmt = '#,##0.00'
+    for ws in wb.worksheets:
+        for row in ws.iter_rows(min_row=2):
+            for cell in row:
+                if isinstance(cell.value, (int, float)):
+                    label = str(ws.cell(row=cell.row, column=1).value or "")
+                    if any(k in label for k in ["ROI", "Margin", "%", "Rule"]):
+                        if abs(cell.value) <= 5:
+                            cell.number_format = percent_fmt
+                        else:
+                            cell.number_format = number2_fmt
+                    elif any(k in label for k in ["Price", "ARV", "Cost", "Costs", "Repair", "Budget", "Profit", "Offer", "Loan", "Payment", "Commission", "Cash", "Equity", "Down Payment", "Points", "Interest"]):
+                        cell.number_format = currency_fmt
+                    else:
+                        cell.number_format = number2_fmt
+                    if cell.value < 0:
+                        cell.font = Font(color="FF0000", bold=True)
+        for c in range(1, ws.max_column + 1):
+            ws.cell(row=1, column=c).font = Font(bold=True)
+    out = BytesIO()
+    wb.save(out)
+    out.seek(0)
+    return out.getvalue()
+
+
+def _fmt_flip_metric(metric, val):
+    if val is None or (isinstance(val, float) and np.isnan(val)):
+        return "N/A"
+    try:
+        if any(k in metric for k in ["ROI", "Margin"]):
+            return f"{val*100:.2f}%"
+        if any(k in metric for k in ["Price", "ARV", "Cost", "Costs", "Repair", "Budget", "Profit", "Offer", "Loan", "Payment", "Commission", "Cash", "Equity", "Down Payment", "Points", "Interest"]):
+            return f"${val:,.2f}"
+        if isinstance(val, (int, float, np.number)):
+            return f"{val:,.2f}"
+    except Exception:
+        pass
+    return val
+
+
+def render_fix_flip_calculator():
+    st.subheader("🔨 Fix & Flip / Fixer Upper Analyzer")
+    st.caption("Analyze ARV, rehab budget, holding costs, selling costs, financing, profit, ROI, and maximum allowable offer.")
+
+    with st.form("fix_flip_form"):
+        c1, c2, c3 = st.columns(3)
+        with c1:
+            purchase_price = st.number_input("Purchase Price ($)", value=185000.0, min_value=0.0, step=1000.0, key="flip_purchase")
+            arv = st.number_input("After Repair Value / ARV ($)", value=285000.0, min_value=0.0, step=1000.0, key="flip_arv")
+            repair_costs = st.number_input("Estimated Repair Costs ($)", value=35000.0, min_value=0.0, step=1000.0, key="flip_repairs")
+            contingency_pct = st.number_input("Repair Contingency (%)", value=10.0, min_value=0.0, max_value=100.0, step=1.0, key="flip_contingency")
+        with c2:
+            purchase_closing_costs = st.number_input("Purchase Closing Costs ($)", value=3000.0, min_value=0.0, step=500.0, key="flip_buy_cc")
+            holding_months = st.number_input("Holding Period (months)", value=6, min_value=0, max_value=60, step=1, key="flip_hold_months")
+            monthly_holding_costs = st.number_input("Monthly Holding Costs ($)", value=1000.0, min_value=0.0, step=100.0, key="flip_monthly_hold")
+            selling_closing_costs = st.number_input("Sale Closing Costs ($)", value=2500.0, min_value=0.0, step=500.0, key="flip_sale_cc")
+        with c3:
+            selling_commission_pct = st.number_input("Sale Commission (%)", value=6.0, min_value=0.0, max_value=20.0, step=0.25, key="flip_commission")
+            down_payment_pct = st.number_input("Investor Down Payment (%)", value=20.0, min_value=0.0, max_value=100.0, step=1.0, key="flip_down_pct")
+            hard_money_interest_pct = st.number_input("Hard Money Interest Rate (%)", value=12.0, min_value=0.0, max_value=50.0, step=0.25, key="flip_interest")
+            lender_points_pct = st.number_input("Lender Points (%)", value=2.0, min_value=0.0, max_value=20.0, step=0.25, key="flip_points")
+
+        st.markdown("#### Offer Rules")
+        r1, r2 = st.columns(2)
+        with r1:
+            rule_of_thumb_pct = st.number_input("MAO Rule (% of ARV)", value=70.0, min_value=0.0, max_value=100.0, step=1.0, help="Common rule: 70% of ARV minus repairs.", key="flip_mao_rule")
+        with r2:
+            target_profit_pct = st.number_input("Target Profit Margin (% of ARV)", value=15.0, min_value=0.0, max_value=100.0, step=1.0, key="flip_target_margin")
+
+        submitted = st.form_submit_button("🔨 Analyze Fix & Flip", use_container_width=True)
+
+    if not submitted:
+        st.info("Enter your fixer-upper assumptions and click Analyze Fix & Flip.")
+        _google_form_cta("📋 Request Help Reviewing a Flip Deal")
+        return
+
+    metrics = calculate_flip_metrics(
+        purchase_price=purchase_price,
+        arv=arv,
+        repair_costs=repair_costs,
+        purchase_closing_costs=purchase_closing_costs,
+        holding_months=holding_months,
+        monthly_holding_costs=monthly_holding_costs,
+        selling_closing_costs=selling_closing_costs,
+        selling_commission_pct=selling_commission_pct,
+        lender_points_pct=lender_points_pct,
+        hard_money_interest_pct=hard_money_interest_pct,
+        down_payment_pct=down_payment_pct,
+        contingency_pct=contingency_pct,
+        target_profit_pct=target_profit_pct,
+        rule_of_thumb_pct=rule_of_thumb_pct,
+    )
+
+    inputs = {
+        "Purchase Price": purchase_price,
+        "ARV": arv,
+        "Estimated Repairs": repair_costs,
+        "Repair Contingency %": contingency_pct / 100.0,
+        "Purchase Closing Costs": purchase_closing_costs,
+        "Holding Months": holding_months,
+        "Monthly Holding Costs": monthly_holding_costs,
+        "Sale Closing Costs": selling_closing_costs,
+        "Sale Commission %": selling_commission_pct / 100.0,
+        "Down Payment %": down_payment_pct / 100.0,
+        "Hard Money Interest %": hard_money_interest_pct / 100.0,
+        "Lender Points %": lender_points_pct / 100.0,
+        "MAO Rule %": rule_of_thumb_pct / 100.0,
+        "Target Profit Margin %": target_profit_pct / 100.0,
+    }
+
+    _track_usage("flip_analysis_run", {
+        "purchase_price": purchase_price,
+        "arv": arv,
+        "repair_costs": repair_costs,
+        "net_profit": metrics.get("Net Profit"),
+        "roi_on_cash": metrics.get("ROI on Cash"),
+        "profit_margin": metrics.get("Profit Margin"),
+    })
+    _save_feedback({
+        "timestamp": datetime.now().strftime("%Y-%m-%d %H:%M:%S"),
+        "event": "flip_analysis_run",
+        "purchase_price": purchase_price,
+        "arv": arv,
+        "repair_costs": repair_costs,
+        "net_profit": metrics.get("Net Profit"),
+        "roi_on_cash": metrics.get("ROI on Cash"),
+        "profit_margin": metrics.get("Profit Margin"),
+    })
+
+    st.subheader("📊 Flip Summary")
+    m1, m2, m3, m4 = st.columns(4)
+    m1.metric("Net Profit", _fmt_flip_metric("Net Profit", metrics["Net Profit"]))
+    m2.metric("ROI on Cash", _fmt_flip_metric("ROI on Cash", metrics["ROI on Cash"]))
+    m3.metric("Profit Margin", _fmt_flip_metric("Profit Margin", metrics["Profit Margin"]))
+    m4.metric("Cash Needed", _fmt_flip_metric("Estimated Cash Needed", metrics["Estimated Cash Needed"]))
+
+    max_offer_cols = [k for k in metrics if k.startswith("Max Offer")]
+    if max_offer_cols:
+        c1, c2 = st.columns(2)
+        c1.metric(max_offer_cols[0], _fmt_flip_metric(max_offer_cols[0], metrics[max_offer_cols[0]]))
+        if len(max_offer_cols) > 1:
+            c2.metric(max_offer_cols[1], _fmt_flip_metric(max_offer_cols[1], metrics[max_offer_cols[1]]))
+
+    if metrics["Net Profit"] < 0:
+        st.error("This flip is showing a projected loss based on your assumptions.")
+    elif metrics["Profit Margin"] is not None and metrics["Profit Margin"] < (target_profit_pct / 100.0):
+        st.warning("Projected profit is positive, but below your target profit margin.")
+    else:
+        st.success("This flip meets or exceeds your target profit margin based on the entered assumptions.")
+
+    display_df = pd.DataFrame([{"Metric": k, "Value": _fmt_flip_metric(k, v)} for k, v in metrics.items()])
+    def _style_flip_rows(row):
+        raw_val = metrics.get(row["Metric"])
+        return ["", "color:red;" if isinstance(raw_val, (int, float, np.number)) and raw_val < 0 else ""]
+    st.write(display_df.style.apply(_style_flip_rows, axis=1))
+
+    st.subheader("📋 Next Step")
+    st.write("Want a second opinion on the repair budget, ARV, or offer price? Submit the property and I can review it.")
+    _google_form_cta("📋 Request Free Flip Deal Review")
+
+    excel_bytes = flip_metrics_to_xlsx_bytes(inputs, metrics)
+    st.download_button(
+        "📥 Download Flip Analysis Excel",
+        data=excel_bytes,
+        file_name="fix_flip_analysis.xlsx",
+        mime="application/vnd.openxmlformats-officedocument.spreadsheetml.sheet",
+        use_container_width=True,
+    )
+
+
 # -------------------------
 # Streamlit UI
 # -------------------------
@@ -1268,6 +1528,16 @@ if "lead_captured" not in st.session_state:
     st.session_state.lead_captured = False
 
 st.divider()
+
+analysis_type = st.radio(
+    "Choose Analysis Type",
+    ["Rental / Buy & Hold ROI", "Fix & Flip / Fixer Upper"],
+    horizontal=True
+)
+
+if analysis_type == "Fix & Flip / Fixer Upper":
+    render_fix_flip_calculator()
+    st.stop()
 
 col1, col2, col3 = st.columns([1, 1, 1])
 
