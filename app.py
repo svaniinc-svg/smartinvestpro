@@ -14,7 +14,7 @@ import uuid
 
 
 st.set_page_config(page_title="Real Estate ROI Calculator", layout="wide")
-st.title("🏡 Real Estate ROI Calculator with Multiple Units")
+st.title("🏡 Smart Rental ROI Calculator + Investor Lead Funnel")
 
 st.caption("No signup required. Run the numbers first. Join the investor deals list later if you want Charlotte-area opportunities and deal review follow-up.")
 
@@ -894,6 +894,345 @@ def _investor_deals_list_section(default_purchase_price=0.0, default_market="Cha
             st.success("Thank you! You are on the investor deals list.")
 
 
+
+
+def _lead_score(actions: dict) -> tuple[int, str]:
+    """Simple lead scoring for follow-up priority."""
+    score = 0
+    score += 5 if actions.get("visit") else 0
+    score += 10 if actions.get("calculation") else 0
+    score += 20 if actions.get("excel") else 0
+    score += 25 if actions.get("investor_list") else 0
+    score += 30 if actions.get("email_report") else 0
+    score += 35 if actions.get("loan_quote") else 0
+    score += 40 if actions.get("seller_lead") else 0
+    score += 50 if actions.get("deal_review") else 0
+    score += 30 if actions.get("buy_box") else 0
+    if score >= 75:
+        return score, "Hot Lead"
+    if score >= 35:
+        return score, "Warm Lead"
+    return score, "Cold Lead"
+
+
+def _current_metrics_summary(metrics: dict, purchase_price: float, monthly_rent: float, num_units: int) -> dict:
+    return {
+        "purchase_price": purchase_price,
+        "monthly_rent_total": monthly_rent,
+        "number_of_units": num_units,
+        "cap_rate": metrics.get("Cap Rate"),
+        "cash_on_cash": metrics.get("Cash on Cash Return (Yr1)"),
+        "dcr": metrics.get("DCR (Yr1)"),
+        "irr_hold": metrics.get("IRR (hold period)"),
+        "roi_hold": metrics.get("ROI (hold period)"),
+        "total_profit_hold": metrics.get("Total Profit (hold)"),
+        "annual_cash_flow_y1": metrics.get("Annual Cash Flow (Yr1)"),
+        "net_sale_proceeds": metrics.get("Net Sale Proceeds"),
+    }
+
+
+def _fmt_pct_for_text(x):
+    try:
+        if x is None or (isinstance(x, float) and np.isnan(x)):
+            return "N/A"
+        return f"{x*100:.2f}%"
+    except Exception:
+        return "N/A"
+
+
+def _fmt_money_for_text(x):
+    try:
+        if x is None or (isinstance(x, float) and np.isnan(x)):
+            return "N/A"
+        return f"${x:,.2f}"
+    except Exception:
+        return "N/A"
+
+
+def _lead_common_fields(name, email, phone, lead_type, source, extra=None):
+    extra = extra or {}
+    actions = {
+        "visit": True,
+        "calculation": True,
+        "excel": lead_type == "Excel Download",
+        "investor_list": lead_type == "Investor Deals List",
+        "email_report": lead_type == "Email ROI Report",
+        "deal_review": lead_type == "Deal Review Request",
+        "buy_box": lead_type == "Investor Buy Box",
+        "loan_quote": lead_type == "DSCR Loan Quote",
+        "seller_lead": lead_type == "Seller Lead",
+    }
+    score, rating = _lead_score(actions)
+    row = {
+        "timestamp": datetime.now().strftime("%Y-%m-%d %H:%M:%S"),
+        "lead_type": lead_type,
+        "name": str(name or "").strip(),
+        "email": str(email or "").strip(),
+        "phone": str(phone or "").strip(),
+        "lead_score": score,
+        "lead_rating": rating,
+        "source": source,
+        "session_id": _get_session_id(),
+    }
+    row.update(extra)
+    return row
+
+
+def _email_roi_report_section(metrics, purchase_price, monthly_rent, num_units):
+    st.subheader("📧 Email Me This ROI Report")
+    st.caption("Let users run the analysis first, then capture contact info from serious users who want the report sent to them.")
+    with st.expander("Email this analysis", expanded=False):
+        with st.form("email_roi_report_form", clear_on_submit=True):
+            c1, c2, c3 = st.columns(3)
+            with c1:
+                name = st.text_input("Name *", key="email_report_name")
+            with c2:
+                email = st.text_input("Email *", key="email_report_email")
+            with c3:
+                phone = st.text_input("Phone", key="email_report_phone")
+            property_address = st.text_input("Property Address / MLS #", key="email_report_property")
+            consent = st.checkbox("I agree to be contacted about this ROI report and investment opportunities.", key="email_report_consent")
+            submitted = st.form_submit_button("Request ROI Report", use_container_width=True)
+        if submitted:
+            if not name.strip():
+                st.error("Please enter your name.")
+                return
+            if not _is_valid_email(email):
+                st.error("Please enter a valid email.")
+                return
+            if not consent:
+                st.error("Please check the contact permission box.")
+                return
+            extra = _current_metrics_summary(metrics, purchase_price, monthly_rent, num_units)
+            extra.update({"property_address": property_address.strip(), "consent": consent})
+            row = _lead_common_fields(name, email, phone, "Email ROI Report", "Smart Rental ROI App", extra)
+            _save_lead(row)
+            st.session_state.lead_info = row
+            _track_usage("email_roi_report_request", extra)
+            st.success("Request saved. You can follow up with this user and send the report.")
+
+
+def _deal_review_section(metrics, purchase_price, monthly_rent, num_units):
+    st.subheader("📋 Request Free Deal Review")
+    st.caption("Highest-quality lead: this user has a specific property and wants your second opinion.")
+    with st.expander("Request free deal review", expanded=False):
+        with st.form("deal_review_form", clear_on_submit=True):
+            c1, c2 = st.columns(2)
+            with c1:
+                name = st.text_input("Name *", key="review_name")
+                email = st.text_input("Email *", key="review_email")
+                phone = st.text_input("Phone", key="review_phone")
+            with c2:
+                property_address = st.text_input("Property Address / MLS # *", key="review_property")
+                timeline = st.selectbox("Decision Timeline", ["Now", "This week", "This month", "Just researching"], key="review_timeline")
+                financing = st.selectbox("Financing", ["Cash", "Conventional", "DSCR Loan", "Hard Money", "Not sure"], key="review_financing")
+            notes = st.text_area("Questions / concerns about the deal", key="review_notes")
+            consent = st.checkbox("I agree to be contacted about this deal review.", key="review_consent")
+            submitted = st.form_submit_button("Request Free Deal Review", use_container_width=True)
+        if submitted:
+            if not name.strip() or not property_address.strip():
+                st.error("Please enter your name and property address.")
+                return
+            if not _is_valid_email(email):
+                st.error("Please enter a valid email.")
+                return
+            if not consent:
+                st.error("Please check the contact permission box.")
+                return
+            extra = _current_metrics_summary(metrics, purchase_price, monthly_rent, num_units)
+            extra.update({"property_address": property_address.strip(), "timeline": timeline, "financing": financing, "notes": notes.strip(), "consent": consent})
+            row = _lead_common_fields(name, email, phone, "Deal Review Request", "Smart Rental ROI App", extra)
+            _save_lead(row)
+            st.session_state.lead_info = row
+            _track_usage("deal_review_request", extra)
+            st.success("Deal review request saved.")
+
+
+def _investor_buy_box_section(metrics, purchase_price, monthly_rent, num_units):
+    st.subheader("🎯 Investor Buy Box")
+    st.caption("Use this to learn exactly what each investor wants to buy.")
+    with st.expander("Build my investor buy box", expanded=False):
+        with st.form("investor_buy_box_form", clear_on_submit=True):
+            c1, c2 = st.columns(2)
+            with c1:
+                name = st.text_input("Name *", key="buybox_name")
+                email = st.text_input("Email *", key="buybox_email")
+                phone = st.text_input("Phone", key="buybox_phone")
+                budget = st.selectbox("Budget", ["Under $250K", "$250K-$500K", "$500K-$1M", "$1M+"], key="buybox_budget")
+            with c2:
+                strategy = st.multiselect("Strategy", ["Buy & Hold", "BRRRR", "Flip", "Multifamily", "Short-Term Rental", "Commercial", "Land"], key="buybox_strategy")
+                property_type = st.multiselect("Property Type", ["Single Family", "Townhome", "Condo", "Duplex", "Triplex/Quad", "5+ Unit Multifamily", "Commercial"], key="buybox_property_type")
+                timeline = st.selectbox("Timeline", ["Now", "0-3 months", "3-6 months", "6+ months"], key="buybox_timeline")
+                financing = st.selectbox("Financing", ["Cash", "Conventional", "DSCR Loan", "Hard Money", "Private Money", "Not sure"], key="buybox_financing")
+            markets = st.text_input("Preferred markets", value="Charlotte, Fort Mill, Waxhaw, Hickory, Denver", key="buybox_markets")
+            criteria = st.text_area("Must-have criteria", key="buybox_criteria")
+            consent = st.checkbox("I agree to be contacted with matching investor opportunities.", key="buybox_consent")
+            submitted = st.form_submit_button("Save My Buy Box", use_container_width=True)
+        if submitted:
+            if not name.strip():
+                st.error("Please enter your name.")
+                return
+            if not _is_valid_email(email):
+                st.error("Please enter a valid email.")
+                return
+            if not consent:
+                st.error("Please check the contact permission box.")
+                return
+            extra = _current_metrics_summary(metrics, purchase_price, monthly_rent, num_units)
+            extra.update({
+                "budget": budget,
+                "strategy": ", ".join(strategy),
+                "property_type": ", ".join(property_type),
+                "timeline": timeline,
+                "financing": financing,
+                "market": markets.strip(),
+                "criteria": criteria.strip(),
+                "consent": consent,
+            })
+            row = _lead_common_fields(name, email, phone, "Investor Buy Box", "Smart Rental ROI App", extra)
+            _save_lead(row)
+            st.session_state.lead_info = row
+            _track_usage("investor_buy_box", extra)
+            st.success("Your buy box was saved.")
+
+
+def _save_compare_scenario_section(metrics, purchase_price, monthly_rent, num_units):
+    st.subheader("💾 Save & Compare Scenarios")
+    if "saved_scenarios" not in st.session_state:
+        st.session_state.saved_scenarios = []
+    with st.expander("Save current scenario", expanded=False):
+        scenario_name = st.text_input("Scenario Name", value=f"Property {len(st.session_state.saved_scenarios)+1}", key="scenario_name")
+        if st.button("Save Scenario", use_container_width=True):
+            row = {
+                "Scenario": scenario_name,
+                "Purchase Price": purchase_price,
+                "Monthly Rent": monthly_rent,
+                "Units": num_units,
+                "Annual Cash Flow Yr1": metrics.get("Annual Cash Flow (Yr1)"),
+                "Cap Rate": metrics.get("Cap Rate"),
+                "Cash on Cash": metrics.get("Cash on Cash Return (Yr1)"),
+                "DCR": metrics.get("DCR (Yr1)"),
+                "IRR Hold": metrics.get("IRR (hold period)"),
+                "Total Profit Hold": metrics.get("Total Profit (hold)"),
+            }
+            st.session_state.saved_scenarios.append(row)
+            _track_usage("scenario_saved", {"scenario_name": scenario_name, "purchase_price": purchase_price})
+            st.success("Scenario saved for this session.")
+    if st.session_state.saved_scenarios:
+        compare_df = pd.DataFrame(st.session_state.saved_scenarios)
+        fmt = {
+            "Purchase Price": "${:,.0f}",
+            "Monthly Rent": "${:,.0f}",
+            "Annual Cash Flow Yr1": "${:,.0f}",
+            "Cap Rate": "{:.2%}",
+            "Cash on Cash": "{:.2%}",
+            "DCR": "{:.2f}",
+            "IRR Hold": "{:.2%}",
+            "Total Profit Hold": "${:,.0f}",
+        }
+        st.dataframe(compare_df.style.format({k:v for k,v in fmt.items() if k in compare_df.columns}), use_container_width=True)
+        st.download_button("Download Scenario Comparison CSV", compare_df.to_csv(index=False), "scenario_comparison.csv", "text/csv", use_container_width=True)
+
+
+def _share_analysis_section(metrics, purchase_price, monthly_rent, num_units):
+    st.subheader("🔗 Share Analysis")
+    summary_text = f"""Smart Rental ROI Analysis
+Purchase Price: {_fmt_money_for_text(purchase_price)}
+Monthly Rent: {_fmt_money_for_text(monthly_rent)}
+Units: {num_units}
+Annual Cash Flow Yr1: {_fmt_money_for_text(metrics.get('Annual Cash Flow (Yr1)'))}
+Cap Rate: {_fmt_pct_for_text(metrics.get('Cap Rate'))}
+Cash-on-Cash Return Yr1: {_fmt_pct_for_text(metrics.get('Cash on Cash Return (Yr1)'))}
+DCR Yr1: {metrics.get('DCR (Yr1)') if metrics.get('DCR (Yr1)') is not None else 'N/A'}
+IRR Hold Period: {_fmt_pct_for_text(metrics.get('IRR (hold period)'))}
+Total Profit Hold: {_fmt_money_for_text(metrics.get('Total Profit (hold)'))}
+"""
+    with st.expander("Copy/share result summary", expanded=False):
+        st.text_area("Copy this summary to send to a partner, lender, or client", summary_text, height=220)
+        _track_usage("share_summary_viewed", {"purchase_price": purchase_price})
+
+
+def _lead_score_section():
+    lead = st.session_state.get("lead_info", {})
+    if lead:
+        score = lead.get("lead_score", "")
+        rating = lead.get("lead_rating", "")
+        if score != "":
+            st.info(f"Lead status for latest opt-in: {rating} — Score {score}")
+
+
+def _loan_quote_section(metrics, purchase_price, monthly_rent, num_units):
+    st.subheader("🏦 Need DSCR / Investor Loan Quote?")
+    with st.expander("Request loan quote", expanded=False):
+        with st.form("loan_quote_form", clear_on_submit=True):
+            c1, c2 = st.columns(2)
+            with c1:
+                name = st.text_input("Name *", key="loan_name")
+                email = st.text_input("Email *", key="loan_email")
+                phone = st.text_input("Phone", key="loan_phone")
+                loan_amount = st.number_input("Estimated Loan Amount ($)", min_value=0.0, value=float(max(0, purchase_price * 0.8)), step=5000.0, key="loan_amount_quote")
+            with c2:
+                credit_range = st.selectbox("Credit Score Range", ["760+", "720-759", "680-719", "640-679", "Below 640", "Not sure"], key="loan_credit")
+                down_payment_quote = st.number_input("Down Payment Available ($)", min_value=0.0, value=float(max(0, purchase_price * 0.2)), step=5000.0, key="loan_down_payment")
+                property_address = st.text_input("Property Address / MLS #", key="loan_property")
+                loan_type = st.selectbox("Loan Type", ["DSCR", "Conventional Investor", "Hard Money", "Bridge", "Not sure"], key="loan_type")
+            consent = st.checkbox("I agree to be contacted about financing options.", key="loan_consent")
+            submitted = st.form_submit_button("Request Loan Quote", use_container_width=True)
+        if submitted:
+            if not name.strip():
+                st.error("Please enter your name.")
+                return
+            if not _is_valid_email(email):
+                st.error("Please enter a valid email.")
+                return
+            if not consent:
+                st.error("Please check the contact permission box.")
+                return
+            extra = _current_metrics_summary(metrics, purchase_price, monthly_rent, num_units)
+            extra.update({"loan_amount_requested": loan_amount, "credit_range": credit_range, "down_payment_available": down_payment_quote, "property_address": property_address.strip(), "loan_type": loan_type, "consent": consent})
+            row = _lead_common_fields(name, email, phone, "DSCR Loan Quote", "Smart Rental ROI App", extra)
+            _save_lead(row)
+            st.session_state.lead_info = row
+            _track_usage("loan_quote_request", extra)
+            st.success("Loan quote request saved.")
+
+
+def _seller_lead_section(metrics, purchase_price, monthly_rent, num_units):
+    st.subheader("🏠 Have a Property to Sell?")
+    with st.expander("Get investor offer estimate", expanded=False):
+        with st.form("seller_lead_form", clear_on_submit=True):
+            c1, c2 = st.columns(2)
+            with c1:
+                name = st.text_input("Name *", key="seller_name")
+                email = st.text_input("Email *", key="seller_email")
+                phone = st.text_input("Phone", key="seller_phone")
+                property_address = st.text_input("Property Address *", key="seller_property")
+            with c2:
+                asking_price = st.number_input("Target / Asking Price ($)", min_value=0.0, value=float(purchase_price), step=5000.0, key="seller_asking")
+                condition = st.selectbox("Condition", ["Move-in ready", "Light updates", "Needs rehab", "Heavy rehab", "Not sure"], key="seller_condition")
+                timeline = st.selectbox("Selling Timeline", ["ASAP", "0-30 days", "30-90 days", "3+ months", "Just curious"], key="seller_timeline")
+                occupancy = st.selectbox("Occupancy", ["Vacant", "Owner occupied", "Tenant occupied", "Partially occupied", "Not sure"], key="seller_occupancy")
+            notes = st.text_area("Notes", key="seller_notes")
+            consent = st.checkbox("I agree to be contacted about selling this property.", key="seller_consent")
+            submitted = st.form_submit_button("Request Investor Offer Estimate", use_container_width=True)
+        if submitted:
+            if not name.strip() or not property_address.strip():
+                st.error("Please enter your name and property address.")
+                return
+            if not _is_valid_email(email):
+                st.error("Please enter a valid email.")
+                return
+            if not consent:
+                st.error("Please check the contact permission box.")
+                return
+            extra = _current_metrics_summary(metrics, purchase_price, monthly_rent, num_units)
+            extra.update({"property_address": property_address.strip(), "asking_price": asking_price, "condition": condition, "timeline": timeline, "occupancy": occupancy, "notes": notes.strip(), "consent": consent})
+            row = _lead_common_fields(name, email, phone, "Seller Lead", "Smart Rental ROI App", extra)
+            _save_lead(row)
+            st.session_state.lead_info = row
+            _track_usage("seller_lead_request", extra)
+            st.success("Seller lead request saved.")
+
 # -------------------------
 # Streamlit UI
 # -------------------------
@@ -1187,8 +1526,16 @@ if st.button("📊 Calculate ROI", use_container_width=True):
     )
 
 
-    # --- Soft investor lead capture (no upfront gate) ---
+    # --- Soft investor lead capture and investor tools (no upfront gate) ---
     _investor_deals_list_section(default_purchase_price=purchase_price)
+    _email_roi_report_section(metrics, purchase_price, monthly_rent, num_units)
+    _deal_review_section(metrics, purchase_price, monthly_rent, num_units)
+    _investor_buy_box_section(metrics, purchase_price, monthly_rent, num_units)
+    _save_compare_scenario_section(metrics, purchase_price, monthly_rent, num_units)
+    _share_analysis_section(metrics, purchase_price, monthly_rent, num_units)
+    _loan_quote_section(metrics, purchase_price, monthly_rent, num_units)
+    _seller_lead_section(metrics, purchase_price, monthly_rent, num_units)
+    _lead_score_section()
 
     # --- Feedback / follow-up request ---
     st.subheader("💬 Feedback & Deal Review")
