@@ -787,7 +787,7 @@ if st.button("Calculate"):
     st.write(
         yearly_cf.style
             .format(ycf_format)
-            .applymap(_style_red_neg, subset=[c for c in yearly_cf.columns if c in YCF_MONEY_COLS])
+            .map(_style_red_neg, subset=[c for c in yearly_cf.columns if c in YCF_MONEY_COLS])
     )
 
     # --- DSCR Trend (table + line chart) ---
@@ -826,7 +826,7 @@ if st.button("Calculate"):
     st.write(
         amort_view.style
             .format(amort_format)
-            .applymap(_style_red_neg, subset=AMORT_MONEY_COLS)
+            .map(_style_red_neg, subset=AMORT_MONEY_COLS)
     )
 
     # --- Excel download ---
