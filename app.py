@@ -18,6 +18,18 @@ st.title("🏡 Smart Rental ROI Calculator + Investor Lead Funnel")
 
 st.caption("No signup required. Run the numbers first. Join the investor deals list later if you want Charlotte-area opportunities and deal review follow-up.")
 
+GOOGLE_FORM_URL = "https://docs.google.com/forms/d/e/1FAIpQLSflugSLnJotBhdAbFQ7rV31d58VaxAo-e62a-ouCxpCENvPJA/viewform?usp=publish-editor"
+
+def _google_form_cta(label="Open Investor Inquiry Form"):
+    """External Google Form CTA. Responses go to your linked Google Sheet."""
+    st.link_button(label, GOOGLE_FORM_URL, use_container_width=True)
+
+def _sidebar_google_form_cta():
+    with st.sidebar:
+        st.markdown("### 🚀 Investor Help")
+        st.caption("Request a deal review, join the investor list, ask for financing, or submit a seller lead.")
+        st.link_button("📋 Open Investor Form", GOOGLE_FORM_URL, use_container_width=True)
+
 # -------------------------
 # Financial helpers
 # -------------------------
@@ -807,6 +819,8 @@ def _investor_deals_list_section(default_purchase_price=0.0, default_market="Cha
     """Soft lead capture: no signup required to use calculator."""
     st.divider()
     st.subheader("🔥 Get Weekly Charlotte Investor Deals")
+    st.caption("Fast option: use the Google Form. It saves responses to your linked Google Sheet.")
+    _google_form_cta("🔥 Join Investor Deals List via Google Form")
     st.markdown(
         "Join the investor list to receive off-market leads, flips, BRRRR opportunities, "
         "multifamily alerts, price reductions, and deal-analysis tips."
@@ -1014,6 +1028,8 @@ def _email_roi_report_section(metrics, purchase_price, monthly_rent, num_units):
 
 def _deal_review_section(metrics, purchase_price, monthly_rent, num_units):
     st.subheader("📋 Request Free Deal Review")
+    st.caption("Fast option: use the Google Form. It saves responses to your linked Google Sheet.")
+    _google_form_cta("📋 Request Deal Review via Google Form")
     st.caption("Highest-quality lead: this user has a specific property and wants your second opinion.")
     with st.expander("Request free deal review", expanded=False):
         with st.form("deal_review_form", clear_on_submit=True):
@@ -1163,6 +1179,8 @@ def _lead_score_section():
 
 def _loan_quote_section(metrics, purchase_price, monthly_rent, num_units):
     st.subheader("🏦 Need DSCR / Investor Loan Quote?")
+    st.caption("Fast option: use the Google Form. It saves responses to your linked Google Sheet.")
+    _google_form_cta("🏦 Request Loan Quote via Google Form")
     with st.expander("Request loan quote", expanded=False):
         with st.form("loan_quote_form", clear_on_submit=True):
             c1, c2 = st.columns(2)
@@ -1199,6 +1217,8 @@ def _loan_quote_section(metrics, purchase_price, monthly_rent, num_units):
 
 def _seller_lead_section(metrics, purchase_price, monthly_rent, num_units):
     st.subheader("🏠 Have a Property to Sell?")
+    st.caption("Fast option: use the Google Form. It saves responses to your linked Google Sheet.")
+    _google_form_cta("🏠 Submit Seller Lead via Google Form")
     with st.expander("Get investor offer estimate", expanded=False):
         with st.form("seller_lead_form", clear_on_submit=True):
             c1, c2 = st.columns(2)
@@ -1546,7 +1566,7 @@ if st.button("📊 Calculate ROI", use_container_width=True):
             horizontal=True
         )
         comments = st.text_area("What should I improve or add?")
-        wants_review = st.checkbox("I want someone to review this deal with me")
+        wants_review = st.checkbox("I want Raj to review this deal with me")
         feedback_submit = st.form_submit_button("Submit Feedback", use_container_width=True)
 
     if feedback_submit:
