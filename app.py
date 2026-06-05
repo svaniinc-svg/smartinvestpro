@@ -7,6 +7,11 @@ from io import BytesIO
 from openpyxl import load_workbook
 from openpyxl.styles import Font, PatternFill
 import matplotlib.pyplot as plt
+from datetime import datetime
+import re
+from pathlib import Path
+import uuid
+
 
 st.set_page_config(page_title="Real Estate ROI Calculator", layout="wide")
 st.title("🏡 Real Estate ROI Calculator with Multiple Units")
@@ -579,9 +584,230 @@ def dataframes_to_xlsx_bytes(inputs: dict, metrics: dict, amort: pd.DataFrame, y
     out.seek(0)
     return out.getvalue()
 
+
+# -------------------------
+# Lead capture helpers
+# -------------------------
+def _is_valid_email(email: str) -> bool:
+    return bool(re.match(r"^[^@\s]+@[^@\s]+\.[^@\s]+$", (email or "").strip()))
+
+
+def _append_local_csv(row: dict, file_name: str = "leads.csv"):
+    """Fallback storage for local testing. On Streamlit Cloud this may not be permanent."""
+    path = Path(file_name)
+    df = pd.DataFrame([row])
+    if path.exists():
+        df.to_csv(path, mode="a", header=False, index=False)
+    else:
+        df.to_csv(path, index=False)
+
+
+def _append_google_sheet(row: dict, worksheet_name: str = "Leads"):
+    """
+    Optional durable lead storage using Streamlit secrets.
+
+    Add these secrets in Streamlit Cloud:
+    [google_service_account]
+    type = "service_account"
+    project_id = "..."
+    private_key_id = "..."
+    private_key = "-----BEGIN PRIVATE KEY-----\\n...\\n-----END PRIVATE KEY-----\\n"
+    client_email = "..."
+    client_id = "..."
+    auth_uri = "https://accounts.google.com/o/oauth2/auth"
+    token_uri = "https://oauth2.googleapis.com/token"
+    auth_provider_x509_cert_url = "https://www.googleapis.com/oauth2/v1/certs"
+    client_x509_cert_url = "..."
+
+    [google_sheet]
+    sheet_id = "YOUR_GOOGLE_SHEET_ID"
+    """
+    try:
+        import gspread
+        from google.oauth2.service_account import Credentials
+
+        sheet_id = st.secrets.get("google_sheet", {}).get("sheet_id", "")
+        service_account_info = st.secrets.get("google_service_account", None)
+        if not sheet_id or not service_account_info:
+            return False, "Google Sheets secrets not configured. Saved locally instead."
+
+        scopes = ["https://www.googleapis.com/auth/spreadsheets"]
+        credentials = Credentials.from_service_account_info(service_account_info, scopes=scopes)
+        client = gspread.authorize(credentials)
+        spreadsheet = client.open_by_key(sheet_id)
+        try:
+            worksheet = spreadsheet.worksheet(worksheet_name)
+        except Exception:
+            worksheet = spreadsheet.add_worksheet(title=worksheet_name, rows=1000, cols=30)
+
+        existing = worksheet.get_all_values()
+        headers = list(row.keys())
+        if not existing:
+            worksheet.append_row(headers)
+        worksheet.append_row([row.get(h, "") for h in headers])
+        return True, "Saved to Google Sheets."
+    except Exception as e:
+        return False, f"Google Sheets save failed: {e}. Saved locally instead."
+
+
+def _save_lead(row: dict):
+    ok, msg = _append_google_sheet(row, worksheet_name="Leads")
+    if not ok:
+        _append_local_csv(row, "leads.csv")
+    return ok, msg
+
+
+def _save_feedback(row: dict):
+    ok, msg = _append_google_sheet(row, worksheet_name="Feedback")
+    if not ok:
+        _append_local_csv(row, "feedback.csv")
+    return ok, msg
+
+
+def _get_session_id():
+    """Create one anonymous session id per browser session."""
+    if "session_id" not in st.session_state:
+        st.session_state.session_id = str(uuid.uuid4())
+    return st.session_state.session_id
+
+
+def _track_usage(event: str, extra: dict | None = None):
+    """Track app usage events to Google Sheets, with local CSV fallback.
+
+    Events include: page_visit, lead_submitted, calculation_run, feedback, excel_download.
+    Local CSV is fine for testing, but Streamlit Cloud storage is not permanent.
+    Use Google Sheets secrets for durable tracking.
+    """
+    lead = st.session_state.get("lead_info", {})
+    row = {
+        "timestamp": datetime.now().strftime("%Y-%m-%d %H:%M:%S"),
+        "event": event,
+        "session_id": _get_session_id(),
+        "name": lead.get("name", ""),
+        "email": lead.get("email", ""),
+        "phone": lead.get("phone", ""),
+        "investor_type": lead.get("investor_type", ""),
+        "strategy": lead.get("strategy", ""),
+        "market": lead.get("market", ""),
+        "budget": lead.get("budget", ""),
+        "source": "Smart Rental ROI App",
+    }
+    if extra:
+        row.update(extra)
+
+    ok, msg = _append_google_sheet(row, worksheet_name="Usage")
+    if not ok:
+        _append_local_csv(row, "usage_tracking.csv")
+    return ok, msg
+
+
+def _track_page_visit_once():
+    if "page_visit_tracked" not in st.session_state:
+        st.session_state.page_visit_tracked = True
+        _track_usage("page_visit")
+
+
+def _admin_usage_dashboard():
+    """Optional mini dashboard for you. Set secrets admin.password to enable."""
+    with st.sidebar.expander("Admin Usage", expanded=False):
+        configured_password = st.secrets.get("admin", {}).get("password", "") if hasattr(st, "secrets") else ""
+        password = st.text_input("Admin password", type="password")
+        if not configured_password:
+            st.caption("Set [admin] password in Streamlit secrets to enable this dashboard.")
+            return
+        if password != configured_password:
+            return
+
+        usage_path = Path("usage_tracking.csv")
+        leads_path = Path("leads.csv")
+        if usage_path.exists():
+            usage_df = pd.read_csv(usage_path)
+            st.metric("Tracked Events", len(usage_df))
+            if "event" in usage_df.columns:
+                st.write(usage_df["event"].value_counts())
+            st.dataframe(usage_df.tail(25), use_container_width=True)
+        else:
+            st.info("No local usage CSV found. If Google Sheets is configured, check the Usage worksheet.")
+
+        if leads_path.exists():
+            leads_df = pd.read_csv(leads_path)
+            st.metric("Local Leads", len(leads_df))
+
+
+def _lead_capture_gate():
+    st.markdown("### Get Your Free Investment Analysis")
+    st.caption("Enter your contact details to use the ROI calculator and download the Excel report.")
+
+    if "lead_captured" not in st.session_state:
+        st.session_state.lead_captured = False
+    if "lead_info" not in st.session_state:
+        st.session_state.lead_info = {}
+
+    if st.session_state.lead_captured:
+        lead = st.session_state.lead_info
+        st.success(f"Welcome {lead.get('name', '')}! You can run the calculator below.")
+        return
+
+    with st.form("lead_capture_form", clear_on_submit=False):
+        c1, c2, c3 = st.columns(3)
+        with c1:
+            name = st.text_input("Name *")
+            email = st.text_input("Email *")
+        with c2:
+            phone = st.text_input("Phone")
+            investor_type = st.selectbox("I am a", ["Investor", "Agent", "Buyer", "Seller", "Wholesaler", "Lender", "Other"])
+        with c3:
+            strategy = st.selectbox("Investment Strategy", ["Buy & Hold", "BRRRR", "Flip", "Multifamily", "Short-Term Rental", "Commercial", "Just researching"])
+            market = st.text_input("Preferred Market", value="Charlotte / NC / SC")
+
+        budget = st.selectbox("Purchase Budget", ["Under $250K", "$250K-$500K", "$500K-$1M", "$1M+", "Not sure"])
+        property_address = st.text_input("Property you want to analyze (optional)")
+        consent = st.checkbox("I agree to be contacted about this calculator, deal feedback, and investment opportunities.")
+        submitted_lead = st.form_submit_button("Start ROI Analysis", use_container_width=True)
+
+    if submitted_lead:
+        if not name.strip():
+            st.error("Please enter your name.")
+            st.stop()
+        if not _is_valid_email(email):
+            st.error("Please enter a valid email.")
+            st.stop()
+        if not consent:
+            st.error("Please check the contact permission box to continue.")
+            st.stop()
+
+        row = {
+            "timestamp": datetime.now().strftime("%Y-%m-%d %H:%M:%S"),
+            "name": name.strip(),
+            "email": email.strip(),
+            "phone": phone.strip(),
+            "investor_type": investor_type,
+            "strategy": strategy,
+            "market": market.strip(),
+            "budget": budget,
+            "property_address": property_address.strip(),
+            "source": "Smart Rental ROI App",
+        }
+        _save_lead(row)
+        st.session_state.lead_info = row
+        st.session_state.lead_captured = True
+        _track_usage("lead_submitted", {
+            "property_address": property_address.strip(),
+            "consent": consent,
+        })
+        st.rerun()
+
+    st.stop()
+
 # -------------------------
 # Streamlit UI
 # -------------------------
+_track_page_visit_once()
+_admin_usage_dashboard()
+_lead_capture_gate()
+
+st.divider()
+
 col1, col2, col3 = st.columns([1, 1, 1])
 
 with col1:
@@ -697,7 +923,7 @@ else:
 # -------------------------
 # Run calculation
 # -------------------------
-if st.button("Calculate"):
+if st.button("📊 Calculate ROI", use_container_width=True):
     annual_rate = interest_rate_pct / 100.0
 
     # Warn on negative amortization if override_payment is too small
@@ -746,8 +972,37 @@ if st.button("Calculate"):
         "Sale Commission %": sale_commission_pct / 100.0,
         "Hold Period (years)": hold_years,
         "Number of Units": num_units,
-        "Monthly Rent Total": monthly_rent
+        "Monthly Rent Total": monthly_rent,
+        "Lead Name": st.session_state.get("lead_info", {}).get("name", ""),
+        "Lead Email": st.session_state.get("lead_info", {}).get("email", ""),
+        "Lead Phone": st.session_state.get("lead_info", {}).get("phone", "")
     }
+
+
+
+    # Save calculation event as high-intent lead activity
+    lead = st.session_state.get("lead_info", {})
+    calc_event = {
+        "purchase_price": purchase_price,
+        "monthly_rent_total": monthly_rent,
+        "hold_years": hold_years,
+        "cap_rate": metrics.get("Cap Rate"),
+        "cash_on_cash": metrics.get("Cash on Cash Return (Yr1)"),
+        "dcr": metrics.get("DCR (Yr1)"),
+        "total_profit_hold": metrics.get("Total Profit (hold)"),
+        "number_of_units": num_units,
+        "loan_term_years": loan_term_years,
+        "use_buydown_2_1": use_buydown_2_1,
+    }
+    _save_feedback({
+        "timestamp": datetime.now().strftime("%Y-%m-%d %H:%M:%S"),
+        "event": "calculation_run",
+        "name": lead.get("name", ""),
+        "email": lead.get("email", ""),
+        "phone": lead.get("phone", ""),
+        **calc_event
+    })
+    _track_usage("calculation_run", calc_event)
 
     # --- Key Metrics (vertical) ---
     st.subheader("📊 Key Metrics & Predictions (Vertical)")
@@ -829,12 +1084,68 @@ if st.button("Calculate"):
             .map(_style_red_neg, subset=AMORT_MONEY_COLS)
     )
 
+
+    # --- Feedback / follow-up request ---
+    st.subheader("💬 Feedback & Deal Review")
+    with st.form("feedback_form", clear_on_submit=True):
+        usefulness = st.radio(
+            "How useful was this calculator?",
+            ["⭐⭐⭐⭐⭐ Excellent", "⭐⭐⭐⭐ Good", "⭐⭐⭐ Average", "⭐⭐ Needs Work"],
+            horizontal=True
+        )
+        comments = st.text_area("What should I improve or add?")
+        wants_review = st.checkbox("I want Raj to review this deal with me")
+        feedback_submit = st.form_submit_button("Submit Feedback", use_container_width=True)
+
+    if feedback_submit:
+        lead = st.session_state.get("lead_info", {})
+        feedback_event = {
+            "usefulness": usefulness,
+            "comments": comments,
+            "wants_review": wants_review,
+            "purchase_price": purchase_price,
+            "monthly_rent_total": monthly_rent,
+            "cap_rate": metrics.get("Cap Rate"),
+            "cash_on_cash": metrics.get("Cash on Cash Return (Yr1)"),
+            "dcr": metrics.get("DCR (Yr1)")
+        }
+        _save_feedback({
+            "timestamp": datetime.now().strftime("%Y-%m-%d %H:%M:%S"),
+            "event": "feedback",
+            "name": lead.get("name", ""),
+            "email": lead.get("email", ""),
+            "phone": lead.get("phone", ""),
+            **feedback_event
+        })
+        _track_usage("feedback", feedback_event)
+        st.success("Thank you! Your feedback was saved.")
+
     # --- Excel download ---
     excel_bytes = dataframes_to_xlsx_bytes(inputs, metrics, amort, yearly_cf, dscr_df)
-    st.download_button(
+    downloaded = st.download_button(
         "📥 Download Excel",
         data=excel_bytes,
         file_name="roi_amortization.xlsx",
-        mime="application/vnd.openxmlformats-officedocument.spreadsheetml.sheet"
+        mime="application/vnd.openxmlformats-officedocument.spreadsheetml.sheet",
+        use_container_width=True
     )
+
+    if downloaded:
+        lead = st.session_state.get("lead_info", {})
+        download_event = {
+            "purchase_price": purchase_price,
+            "monthly_rent_total": monthly_rent,
+            "cap_rate": metrics.get("Cap Rate"),
+            "cash_on_cash": metrics.get("Cash on Cash Return (Yr1)"),
+            "dcr": metrics.get("DCR (Yr1)")
+        }
+        _save_feedback({
+            "timestamp": datetime.now().strftime("%Y-%m-%d %H:%M:%S"),
+            "event": "excel_download",
+            "name": lead.get("name", ""),
+            "email": lead.get("email", ""),
+            "phone": lead.get("phone", ""),
+            **download_event
+        })
+        _track_usage("excel_download", download_event)
 
