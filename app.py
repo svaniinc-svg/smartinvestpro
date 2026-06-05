@@ -1546,7 +1546,7 @@ if st.button("📊 Calculate ROI", use_container_width=True):
             horizontal=True
         )
         comments = st.text_area("What should I improve or add?")
-        wants_review = st.checkbox("I want Raj to review this deal with me")
+        wants_review = st.checkbox("I want someone to review this deal with me")
         feedback_submit = st.form_submit_button("Submit Feedback", use_container_width=True)
 
     if feedback_submit:
