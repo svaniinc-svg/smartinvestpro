@@ -102,14 +102,20 @@ def _style_red_neg(val):
 def _fmt_metric(metric, val):
     if val is None or (isinstance(val, float) and np.isnan(val)):
         return "N/A"
-    percent_keys = ["Cap Rate", "Cash on Cash", "IRR", "ROI", "Effective Rate", "Occupancy"]
-    currency_keys = ["Price", "Payment", "Subsidy", "NOI", "Debt Service", "Cash Flow",
-                     "Loan", "Proceeds", "Equity", "Profit", "Investment", "Closing Costs", "Commission", "Balance"]
+    percent_keys = ["Cap Rate", "Cash on Cash", "IRR", "ROI", "Effective Rate", "Occupancy", "Margin"]
+    currency_keys = [
+        "Price", "Payment", "Subsidy", "NOI", "Debt Service", "Cash Flow",
+        "Loan", "Proceeds", "Equity", "Profit", "Investment", "Closing Costs",
+        "Commission", "Balance", "Offer", "ARV", "Repair", "Budget", "Cost",
+        "Costs", "Cash", "Points", "Interest", "Down Payment"
+    ]
     try:
-        if any(k in metric for k in percent_keys):
-            return f"{val*100:.2f}%"
+        # Check currency first because labels like "Max Offer for 15% Profit Margin"
+        # include the word Margin but should still be displayed as dollars.
         if any(k in metric for k in currency_keys):
             return f"${val:,.2f}"
+        if any(k in metric for k in percent_keys):
+            return f"{val*100:.2f}%"
         if metric.startswith("DCR"):
             return f"{val:.2f}"
         if isinstance(val, (int, float, np.number)):
@@ -475,9 +481,11 @@ def dataframes_to_xlsx_bytes(inputs: dict, metrics: dict, amort: pd.DataFrame, y
     # Metrics sheet: number formats + DCR/Break-even styling
     try:
         ws = wb["Metrics"]
-        percent_keys = ["Cap Rate", "Cash on Cash", "IRR", "ROI", "Effective Rate", "Occupancy"]
+        percent_keys = ["Cap Rate", "Cash on Cash", "IRR", "ROI", "Effective Rate", "Occupancy", "Margin"]
         currency_keys = ["Price", "Payment", "Subsidy", "NOI", "Debt Service", "Cash Flow",
-                         "Loan", "Proceeds", "Equity", "Profit", "Investment", "Closing Costs", "Commission", "Balance"]
+                         "Loan", "Proceeds", "Equity", "Profit", "Investment", "Closing Costs",
+                         "Commission", "Balance", "Offer", "ARV", "Repair", "Budget", "Cost",
+                         "Costs", "Cash", "Points", "Interest", "Down Payment"]
 
         for r in range(2, ws.max_row + 1):
             mcell = ws.cell(row=r, column=1)
@@ -486,12 +494,12 @@ def dataframes_to_xlsx_bytes(inputs: dict, metrics: dict, amort: pd.DataFrame, y
             val = vcell.value
 
             if isinstance(val, (int, float)):
-                if any(k in metric_name for k in percent_keys):
+                if any(k in metric_name for k in currency_keys):
+                    vcell.number_format = currency_fmt
+                elif any(k in metric_name for k in percent_keys):
                     vcell.number_format = percent_fmt
                 elif metric_name.startswith("DCR"):
                     vcell.number_format = number2_fmt
-                elif any(k in metric_name for k in currency_keys):
-                    vcell.number_format = currency_fmt
                 else:
                     vcell.number_format = number2_fmt
 
@@ -1372,10 +1380,17 @@ def _fmt_flip_metric(metric, val):
     if val is None or (isinstance(val, float) and np.isnan(val)):
         return "N/A"
     try:
+        currency_words = [
+            "Price", "ARV", "Cost", "Costs", "Repair", "Budget", "Profit",
+            "Offer", "Loan", "Payment", "Commission", "Cash", "Equity",
+            "Down Payment", "Points", "Interest", "Holding", "Selling"
+        ]
+        # Currency must be checked before percent because labels like
+        # "Max Offer for 15% Profit Margin" contain "Margin".
+        if any(k in metric for k in currency_words):
+            return f"${val:,.2f}"
         if any(k in metric for k in ["ROI", "Margin"]):
             return f"{val*100:.2f}%"
-        if any(k in metric for k in ["Price", "ARV", "Cost", "Costs", "Repair", "Budget", "Profit", "Offer", "Loan", "Payment", "Commission", "Cash", "Equity", "Down Payment", "Points", "Interest"]):
-            return f"${val:,.2f}"
         if isinstance(val, (int, float, np.number)):
             return f"{val:,.2f}"
     except Exception:
