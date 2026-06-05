@@ -16,6 +16,8 @@ import uuid
 st.set_page_config(page_title="Real Estate ROI Calculator", layout="wide")
 st.title("🏡 Real Estate ROI Calculator with Multiple Units")
 
+st.caption("No signup required. Run the numbers first. Join the investor deals list later if you want Charlotte-area opportunities and deal review follow-up.")
+
 # -------------------------
 # Financial helpers
 # -------------------------
@@ -799,12 +801,112 @@ def _lead_capture_gate():
 
     st.stop()
 
+
+
+def _investor_deals_list_section(default_purchase_price=0.0, default_market="Charlotte / NC / SC"):
+    """Soft lead capture: no signup required to use calculator."""
+    st.divider()
+    st.subheader("🔥 Get Weekly Charlotte Investor Deals")
+    st.markdown(
+        "Join the investor list to receive off-market leads, flips, BRRRR opportunities, "
+        "multifamily alerts, price reductions, and deal-analysis tips."
+    )
+
+    with st.expander("Join Investor Deals List", expanded=False):
+        with st.form("investor_deals_list_form", clear_on_submit=True):
+            c1, c2 = st.columns(2)
+            with c1:
+                investor_name = st.text_input("Name *", key="deals_name")
+                investor_email = st.text_input("Email *", key="deals_email")
+                investor_phone = st.text_input("Phone", key="deals_phone")
+            with c2:
+                investor_type = st.selectbox(
+                    "I am a",
+                    ["Investor", "Agent", "Buyer", "Seller", "Wholesaler", "Lender", "Other"],
+                    key="deals_investor_type"
+                )
+                budget = st.selectbox(
+                    "Purchase Budget",
+                    ["Under $250K", "$250K-$500K", "$500K-$1M", "$1M+", "Not sure"],
+                    key="deals_budget"
+                )
+                timeline = st.selectbox(
+                    "Buying Timeline",
+                    ["Now", "0-3 months", "3-6 months", "6+ months", "Just researching"],
+                    key="deals_timeline"
+                )
+
+            strategy = st.multiselect(
+                "Investment Strategy",
+                ["Buy & Hold", "BRRRR", "Flip", "Multifamily", "Short-Term Rental", "Commercial", "Land"],
+                default=["Buy & Hold"],
+                key="deals_strategy"
+            )
+            market = st.multiselect(
+                "Preferred Markets",
+                ["Charlotte", "Waxhaw", "Fort Mill", "Indian Trail", "Concord", "Denver", "Hickory", "Rock Hill", "Gastonia", "Kannapolis", "Other NC/SC"],
+                default=["Charlotte"],
+                key="deals_market"
+            )
+            notes = st.text_area("What type of deals are you looking for?", key="deals_notes")
+            consent = st.checkbox(
+                "I agree to be contacted about investor deals, property analysis, and market updates.",
+                key="deals_consent"
+            )
+            submitted = st.form_submit_button("Join Investor Deals List", use_container_width=True)
+
+        if submitted:
+            if not investor_name.strip():
+                st.error("Please enter your name.")
+                return
+            if not _is_valid_email(investor_email):
+                st.error("Please enter a valid email.")
+                return
+            if not consent:
+                st.error("Please check the contact permission box.")
+                return
+
+            row = {
+                "timestamp": datetime.now().strftime("%Y-%m-%d %H:%M:%S"),
+                "name": investor_name.strip(),
+                "email": investor_email.strip(),
+                "phone": investor_phone.strip(),
+                "investor_type": investor_type,
+                "strategy": ", ".join(strategy),
+                "market": ", ".join(market) if market else default_market,
+                "budget": budget,
+                "timeline": timeline,
+                "notes": notes.strip(),
+                "current_purchase_price": default_purchase_price,
+                "source": "Investor Deals List - Smart Rental ROI App",
+                "consent": consent,
+            }
+            _save_lead(row)
+            st.session_state.lead_info = row
+            st.session_state.lead_captured = True
+            _track_usage("investor_deals_signup", {
+                "budget": budget,
+                "strategy": row["strategy"],
+                "market": row["market"],
+                "timeline": timeline,
+                "current_purchase_price": default_purchase_price,
+            })
+            st.success("Thank you! You are on the investor deals list.")
+
+
 # -------------------------
 # Streamlit UI
 # -------------------------
 _track_page_visit_once()
 _admin_usage_dashboard()
-_lead_capture_gate()
+
+# Do NOT require lead info upfront. Let users run the calculator anonymously.
+# Lead capture happens later via the Investor Deals List, Feedback, Deal Review,
+# and Excel download events.
+if "lead_info" not in st.session_state:
+    st.session_state.lead_info = {}
+if "lead_captured" not in st.session_state:
+    st.session_state.lead_captured = False
 
 st.divider()
 
@@ -1084,6 +1186,9 @@ if st.button("📊 Calculate ROI", use_container_width=True):
             .map(_style_red_neg, subset=AMORT_MONEY_COLS)
     )
 
+
+    # --- Soft investor lead capture (no upfront gate) ---
+    _investor_deals_list_section(default_purchase_price=purchase_price)
 
     # --- Feedback / follow-up request ---
     st.subheader("💬 Feedback & Deal Review")
