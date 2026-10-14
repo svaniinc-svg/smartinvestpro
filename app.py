@@ -13,8 +13,8 @@ from pathlib import Path
 import uuid
 
 
-st.set_page_config(page_title="Real Estate ROI Calculator", layout="wide")
-st.title("🏡 Smart Rental ROI Calculator + Investor Lead Funnel")
+st.set_page_config(page_title="Know the Deal Before You Invest", layout="wide")
+st.title("🏡 Know the Deal Before You Invest")
 
 st.caption("No signup required. Run the numbers first. Join the investor deals list later if you want Charlotte-area opportunities and deal review follow-up.")
 
