@@ -729,33 +729,6 @@ def _track_page_visit_once():
         _track_usage("page_visit")
 
 
-def _admin_usage_dashboard():
-    """Optional mini dashboard for you. Set secrets admin.password to enable."""
-    with st.sidebar.expander("Admin Usage", expanded=False):
-        configured_password = st.secrets.get("admin", {}).get("password", "") if hasattr(st, "secrets") else ""
-        password = st.text_input("Admin password", type="password")
-        if not configured_password:
-            st.caption("Set [admin] password in Streamlit secrets to enable this dashboard.")
-            return
-        if password != configured_password:
-            return
-
-        usage_path = Path("usage_tracking.csv")
-        leads_path = Path("leads.csv")
-        if usage_path.exists():
-            usage_df = pd.read_csv(usage_path)
-            st.metric("Tracked Events", len(usage_df))
-            if "event" in usage_df.columns:
-                st.write(usage_df["event"].value_counts())
-            st.dataframe(usage_df.tail(25), use_container_width=True)
-        else:
-            st.info("No local usage CSV found. If Google Sheets is configured, check the Usage worksheet.")
-
-        if leads_path.exists():
-            leads_df = pd.read_csv(leads_path)
-            st.metric("Local Leads", len(leads_df))
-
-
 def _lead_capture_gate():
     st.markdown("### Get Your Free Investment Analysis")
     st.caption("Enter your contact details to use the ROI calculator and download the Excel report.")
@@ -1487,12 +1460,18 @@ def render_fix_flip_calculator():
         "profit_margin": metrics.get("Profit Margin"),
     })
 
-    st.subheader("📊 Flip Summary")
+    st.subheader("🔨 Fix & Flip KPIs")
     m1, m2, m3, m4 = st.columns(4)
     m1.metric("Net Profit", _fmt_flip_metric("Net Profit", metrics["Net Profit"]))
     m2.metric("ROI on Cash", _fmt_flip_metric("ROI on Cash", metrics["ROI on Cash"]))
     m3.metric("Profit Margin", _fmt_flip_metric("Profit Margin", metrics["Profit Margin"]))
     m4.metric("Cash Needed", _fmt_flip_metric("Estimated Cash Needed", metrics["Estimated Cash Needed"]))
+
+    f1, f2, f3, f4 = st.columns(4)
+    f1.metric("ARV", _fmt_flip_metric("ARV", metrics["ARV / Resale Price"]))
+    f2.metric("Total Project Cost", _fmt_flip_metric("Total Project Cost", metrics["Total Project Cost"]))
+    f3.metric("Total Rehab", _fmt_flip_metric("Total Rehab Budget", metrics["Total Rehab Budget"]))
+    f4.metric("Holding Period", f"{int(metrics['Holding Period (months)'])} months")
 
     max_offer_cols = [k for k in metrics if k.startswith("Max Offer")]
     if max_offer_cols:
@@ -1532,7 +1511,6 @@ def render_fix_flip_calculator():
 # Streamlit UI
 # -------------------------
 _track_page_visit_once()
-_admin_usage_dashboard()
 
 # Do NOT require lead info upfront. Let users run the calculator anonymously.
 # Lead capture happens later via the Investor Deals List, Feedback, Deal Review,
@@ -1545,12 +1523,12 @@ if "lead_captured" not in st.session_state:
 st.divider()
 
 analysis_type = st.radio(
-    "Choose Analysis Type",
-    ["Rental / Buy & Hold ROI", "Fix & Flip / Fixer Upper"],
+    "Investment Strategy",
+    ["🏘️ Rental", "🔨 Fix & Flip"],
     horizontal=True
 )
 
-if analysis_type == "Fix & Flip / Fixer Upper":
+if analysis_type == "🔨 Fix & Flip":
     render_fix_flip_calculator()
     st.stop()
 
@@ -1750,8 +1728,23 @@ if st.button("📊 Calculate ROI", use_container_width=True):
     })
     _track_usage("calculation_run", calc_event)
 
-    # --- Key Metrics (vertical) ---
-    st.subheader("📊 Key Metrics & Predictions (Vertical)")
+    # --- Rental KPI Dashboard ---
+    st.subheader("🏘️ Rental Investment KPIs")
+    k1, k2, k3, k4, k5 = st.columns(5)
+    k1.metric("Monthly Cash Flow", _fmt_money_for_text(metrics.get("Annual Cash Flow (Yr1)", 0) / 12.0))
+    k2.metric("Cap Rate", _fmt_pct_for_text(metrics.get("Cap Rate")))
+    k3.metric("Cash-on-Cash", _fmt_pct_for_text(metrics.get("Cash on Cash Return (Yr1)")))
+    dcr_kpi = metrics.get("DCR (Yr1)")
+    k4.metric("DSCR", f"{dcr_kpi:.2f}" if isinstance(dcr_kpi, (int, float)) else "N/A")
+    k5.metric("Hold ROI", _fmt_pct_for_text(metrics.get("ROI (hold period)")))
+
+    r1, r2, r3, r4 = st.columns(4)
+    r1.metric("Annual NOI", _fmt_money_for_text(metrics.get("NOI (annual, Yr1 levels)")))
+    r2.metric("Annual Cash Flow", _fmt_money_for_text(metrics.get("Annual Cash Flow (Yr1)")))
+    r3.metric("Break-Even Occupancy", _fmt_pct_for_text(metrics.get("Break-Even Occupancy % (Yr1)")))
+    r4.metric("Total Hold Profit", _fmt_money_for_text(metrics.get("Total Profit (hold)")))
+
+    st.subheader("📋 Detailed Rental Metrics")
     display_rows = []
     red_metrics = set()
 
@@ -1905,4 +1898,3 @@ if st.button("📊 Calculate ROI", use_container_width=True):
             **download_event
         })
         _track_usage("excel_download", download_event)
-
