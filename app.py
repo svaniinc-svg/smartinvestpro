@@ -18,7 +18,6 @@ st.set_page_config(page_title="Know the Deal Before You Invest", layout="wide")
 # Simple native Streamlit header.
 # No emoji, HTML, SVG, forced colors, or custom title CSS.
 st.header("Know the Deal Before You Invest")
-st.markdown("**Analyze Rentals • Evaluate Flips • Invest Smarter**")
 st.caption(
     "No signup required. Run the numbers first. "
     "Join the investor deals list later if you want Charlotte-area opportunities "
