@@ -13,14 +13,11 @@ from pathlib import Path
 import uuid
 
 
-st.set_page_config(page_title="Know the Deal Before You Invest", layout="wide")
+st.set_page_config(page_title="Real Estate ROI Calculator", layout="wide")
 
 # Simple native Streamlit header.
 # No emoji, HTML, SVG, forced colors, or custom title CSS.
-st.markdown(
-    '<span class="app-main-title">Know the Deal Before You Invest</span>',
-    unsafe_allow_html=True,
-)
+st.title("🏡 Smart Rental ROI Calculator + Investor Lead Funnel")
 st.caption(
     "No signup required. Run the numbers first. "
     "Join the investor deals list later if you want Charlotte-area opportunities "
@@ -32,16 +29,6 @@ st.caption(
 # -------------------------
 st.markdown("""
 <style>
-.app-main-title {
-    display: block;
-    font-size: 2.35rem;
-    line-height: 1.15;
-    font-weight: 800;
-    margin: 0 0 0.65rem 0;
-    padding: 0;
-    color: inherit;
-}
-
 .block-container {padding-top: 1.4rem; padding-bottom: 3rem; max-width: 1450px;}
 div[data-testid="stRadio"] > div {gap: 1rem;}
 div[data-testid="stButton"] button, div[data-testid="stDownloadButton"] button {border-radius: 10px; font-weight: 700;}
