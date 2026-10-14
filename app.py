@@ -22,15 +22,28 @@ st.title("Know the Deal Before You Invest")
 st.markdown(
     """
     <style>
+    /* Use more of the page and remove excess blank space around the app header */
+    .block-container {
+        padding-top: 2rem !important;
+        padding-bottom: 2rem !important;
+    }
+
+    /* Tighten only the native title area */
     div[data-testid="stHeadingWithActionElements"] {
-        margin-bottom: -0.75rem;
+        margin-bottom: 0 !important;
+        padding-bottom: 0 !important;
+    }
+
+    /* Reduce spacing between consecutive top-level elements */
+    div[data-testid="stVerticalBlock"] > div:has(
+        div[data-testid="stHeadingWithActionElements"]
+    ) {
+        margin-bottom: 0 !important;
     }
     </style>
     """,
     unsafe_allow_html=True,
 )
-
-
 
 # -------------------------
 # Interactive dashboard styling
