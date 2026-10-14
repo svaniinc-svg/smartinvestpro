@@ -17,10 +17,10 @@ st.set_page_config(page_title="Real Estate ROI Calculator", layout="wide")
 
 # Simple native Streamlit header.
 # No emoji, HTML, SVG, forced colors, or custom title CSS.
-st.title("🏡 Smart Rental ROI Calculator + Investor Lead Funnel")
+st.title("🏡 Know the Deal Before You Invest")
 st.caption(
     "No signup required. Run the numbers first. "
-    "Join the investor deals list later if you want Charlotte-area opportunities "
+    "Join the investor deals list "
     "and deal review follow-up."
 )
 
