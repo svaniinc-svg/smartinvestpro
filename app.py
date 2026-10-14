@@ -45,6 +45,8 @@ st.markdown(
     unsafe_allow_html=True,
 )
 
+st.caption("Analyze Rentals • Evaluate Flips • Invest Smarter")
+
 # -------------------------
 # Interactive dashboard styling
 # -------------------------
