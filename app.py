@@ -18,6 +18,44 @@ st.title("🏡 Smart Rental ROI Calculator + Investor Lead Funnel")
 
 st.caption("No signup required. Run the numbers first. Join the investor deals list later if you want Charlotte-area opportunities and deal review follow-up.")
 
+# -------------------------
+# Interactive dashboard styling
+# -------------------------
+st.markdown("""
+<style>
+.block-container {padding-top: 1.4rem; padding-bottom: 3rem; max-width: 1450px;}
+div[data-testid="stRadio"] > div {gap: .55rem;}
+div[data-testid="stRadio"] label {background: rgba(120,120,120,.08); border: 1px solid rgba(120,120,120,.20); padding: .55rem .9rem; border-radius: 12px;}
+div[data-testid="stButton"] button, div[data-testid="stDownloadButton"] button {border-radius: 10px; font-weight: 700;}
+.kpi-card {border-radius: 16px; padding: 16px 14px; min-height: 116px; border: 1px solid rgba(128,128,128,.18); box-shadow: 0 4px 14px rgba(0,0,0,.07); transition: transform .16s ease, box-shadow .16s ease;}
+.kpi-card:hover {transform: translateY(-3px); box-shadow: 0 8px 20px rgba(0,0,0,.12);}
+.kpi-label {font-size: .82rem; font-weight: 700; opacity: .78; margin-bottom: 7px;}
+.kpi-value {font-size: 1.55rem; line-height: 1.15; font-weight: 800;}
+.kpi-note {font-size: .72rem; opacity: .72; margin-top: 7px;}
+.kpi-good {background: rgba(34,197,94,.14); border-left: 6px solid #22c55e;}
+.kpi-warn {background: rgba(245,158,11,.15); border-left: 6px solid #f59e0b;}
+.kpi-bad {background: rgba(239,68,68,.14); border-left: 6px solid #ef4444;}
+.kpi-neutral {background: rgba(59,130,246,.11); border-left: 6px solid #3b82f6;}
+.deal-banner {padding: 12px 16px; border-radius: 14px; margin: 8px 0 18px 0; font-weight: 700;}
+</style>
+""", unsafe_allow_html=True)
+
+def _kpi_card(container, label, value, status="neutral", note=""):
+    safe_status = status if status in {"good", "warn", "bad", "neutral"} else "neutral"
+    container.markdown(
+        f'<div class="kpi-card kpi-{safe_status}"><div class="kpi-label">{label}</div>'
+        f'<div class="kpi-value">{value}</div><div class="kpi-note">{note}</div></div>',
+        unsafe_allow_html=True,
+    )
+
+def _status_higher(value, good, warn):
+    if value is None or not isinstance(value, (int, float, np.number)) or np.isnan(value): return "neutral"
+    return "good" if value >= good else ("warn" if value >= warn else "bad")
+
+def _status_lower(value, good, warn):
+    if value is None or not isinstance(value, (int, float, np.number)) or np.isnan(value): return "neutral"
+    return "good" if value <= good else ("warn" if value <= warn else "bad")
+
 GOOGLE_FORM_URL = "https://docs.google.com/forms/d/e/1FAIpQLSflugSLnJotBhdAbFQ7rV31d58VaxAo-e62a-ouCxpCENvPJA/viewform?usp=publish-editor"
 
 def _google_form_cta(label="Open Investor Inquiry Form"):
@@ -1460,18 +1498,23 @@ def render_fix_flip_calculator():
         "profit_margin": metrics.get("Profit Margin"),
     })
 
-    st.subheader("🔨 Fix & Flip KPIs")
+    st.subheader("🔨 Fix & Flip Deal Dashboard")
+    net_profit = metrics.get("Net Profit")
+    roi_cash = metrics.get("ROI on Cash")
+    margin = metrics.get("Profit Margin")
+    cash_needed = metrics.get("Estimated Cash Needed")
     m1, m2, m3, m4 = st.columns(4)
-    m1.metric("Net Profit", _fmt_flip_metric("Net Profit", metrics["Net Profit"]))
-    m2.metric("ROI on Cash", _fmt_flip_metric("ROI on Cash", metrics["ROI on Cash"]))
-    m3.metric("Profit Margin", _fmt_flip_metric("Profit Margin", metrics["Profit Margin"]))
-    m4.metric("Cash Needed", _fmt_flip_metric("Estimated Cash Needed", metrics["Estimated Cash Needed"]))
+    _kpi_card(m1, "💰 Net Profit", _fmt_flip_metric("Net Profit", net_profit), _status_higher(net_profit, 30000, 15000), "Green ≥ $30K")
+    _kpi_card(m2, "📈 ROI on Cash", _fmt_flip_metric("ROI on Cash", roi_cash), _status_higher(roi_cash, .20, .10), "Green ≥ 20%")
+    _kpi_card(m3, "🎯 Profit Margin", _fmt_flip_metric("Profit Margin", margin), _status_higher(margin, target_profit_pct/100.0, max(.08, target_profit_pct/200.0)), f"Target {target_profit_pct:.0f}%")
+    max_offer_keys = [k for k in metrics if k.startswith("Max Offer for")]
+    max_offer_key = max_offer_keys[0] if max_offer_keys else next((k for k in metrics if k.startswith("Max Offer")), None)
+    max_offer_val = metrics.get(max_offer_key) if max_offer_key else None
+    offer_status = "neutral"
+    if isinstance(max_offer_val, (int, float, np.number)) and max_offer_val > 0:
+        offer_status = "good" if purchase_price <= max_offer_val else "bad"
+    _kpi_card(m4, "🏷️ Max Offer", _fmt_flip_metric("Max Offer", max_offer_val), offer_status, f"Target {target_profit_pct:.0f}% margin")
 
-    f1, f2, f3, f4 = st.columns(4)
-    f1.metric("ARV", _fmt_flip_metric("ARV", metrics["ARV / Resale Price"]))
-    f2.metric("Total Project Cost", _fmt_flip_metric("Total Project Cost", metrics["Total Project Cost"]))
-    f3.metric("Total Rehab", _fmt_flip_metric("Total Rehab Budget", metrics["Total Rehab Budget"]))
-    f4.metric("Holding Period", f"{int(metrics['Holding Period (months)'])} months")
 
     max_offer_cols = [k for k in metrics if k.startswith("Max Offer")]
     if max_offer_cols:
@@ -1729,20 +1772,34 @@ if st.button("📊 Calculate ROI", use_container_width=True):
     _track_usage("calculation_run", calc_event)
 
     # --- Rental KPI Dashboard ---
-    st.subheader("🏘️ Rental Investment KPIs")
-    k1, k2, k3, k4, k5 = st.columns(5)
-    k1.metric("Monthly Cash Flow", _fmt_money_for_text(metrics.get("Annual Cash Flow (Yr1)", 0) / 12.0))
-    k2.metric("Cap Rate", _fmt_pct_for_text(metrics.get("Cap Rate")))
-    k3.metric("Cash-on-Cash", _fmt_pct_for_text(metrics.get("Cash on Cash Return (Yr1)")))
+    st.subheader("🏘️ Rental Deal Dashboard")
+    annual_cf = metrics.get("Annual Cash Flow (Yr1)")
+    monthly_cf = annual_cf / 12.0 if isinstance(annual_cf, (int, float, np.number)) else None
+    cap = metrics.get("Cap Rate")
+    coc = metrics.get("Cash on Cash Return (Yr1)")
     dcr_kpi = metrics.get("DCR (Yr1)")
-    k4.metric("DSCR", f"{dcr_kpi:.2f}" if isinstance(dcr_kpi, (int, float)) else "N/A")
-    k5.metric("Hold ROI", _fmt_pct_for_text(metrics.get("ROI (hold period)")))
+    hold_roi = metrics.get("ROI (hold period)")
+    break_even = metrics.get("Break-Even Occupancy % (Yr1)")
 
-    r1, r2, r3, r4 = st.columns(4)
-    r1.metric("Annual NOI", _fmt_money_for_text(metrics.get("NOI (annual, Yr1 levels)")))
-    r2.metric("Annual Cash Flow", _fmt_money_for_text(metrics.get("Annual Cash Flow (Yr1)")))
-    r3.metric("Break-Even Occupancy", _fmt_pct_for_text(metrics.get("Break-Even Occupancy % (Yr1)")))
-    r4.metric("Total Hold Profit", _fmt_money_for_text(metrics.get("Total Profit (hold)")))
+    k1, k2, k3, k4 = st.columns(4)
+    _kpi_card(k1, "💵 Monthly Cash Flow", _fmt_money_for_text(monthly_cf), _status_higher(monthly_cf, 300, 0), "Green ≥ $300/mo")
+    _kpi_card(k2, "🏢 Cap Rate", _fmt_pct_for_text(cap), _status_higher(cap, .06, .04), "Green ≥ 6%")
+    _kpi_card(k3, "💰 Cash-on-Cash", _fmt_pct_for_text(coc), _status_higher(coc, .08, .05), "Green ≥ 8%")
+    _kpi_card(k4, "🛡️ DSCR", f"{dcr_kpi:.2f}" if isinstance(dcr_kpi, (int, float, np.number)) else "N/A", _status_higher(dcr_kpi, 1.25, 1.0), "Green ≥ 1.25")
+
+    good_count = sum([
+        _status_higher(monthly_cf, 300, 0) == "good",
+        _status_higher(cap, .06, .04) == "good",
+        _status_higher(coc, .08, .05) == "good",
+        _status_higher(dcr_kpi, 1.25, 1.0) == "good",
+        _status_lower(break_even, .80, .90) == "good",
+    ])
+    if good_count >= 4:
+        st.success(f"🟢 Deal Snapshot: Strong on {good_count}/4 core rental indicators based on the current assumptions.")
+    elif good_count >= 2:
+        st.warning(f"🟡 Deal Snapshot: Mixed — {good_count}/4 core rental indicators are in the strong range.")
+    else:
+        st.error(f"🔴 Deal Snapshot: Only {good_count}/4 core rental indicators are in the strong range. Review price, rent, financing, or expenses.")
 
     st.subheader("📋 Detailed Rental Metrics")
     display_rows = []
