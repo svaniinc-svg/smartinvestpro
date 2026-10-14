@@ -19,6 +19,19 @@ st.set_page_config(page_title="Real Estate ROI Calculator", layout="wide")
 # No emoji, HTML, SVG, forced colors, or custom title CSS.
 st.title("Know the Deal Before You Invest")
 
+st.markdown(
+    """
+    <style>
+    div[data-testid="stHeadingWithActionElements"] {
+        margin-bottom: -0.75rem;
+    }
+    </style>
+    """,
+    unsafe_allow_html=True,
+)
+
+
+
 # -------------------------
 # Interactive dashboard styling
 # -------------------------
