@@ -14,7 +14,8 @@ import uuid
 
 
 st.set_page_config(page_title="Know the Deal Before You Invest", layout="wide")
-st.title("🏡 Know the Deal Before You Invest")
+st.title("Know the Deal Before You Invest")
+st.markdown("**Analyze Rentals • Evaluate Flips • Invest Smarter**")
 
 st.caption("No signup required. Run the numbers first. Join the investor deals list later if you want Charlotte-area opportunities and deal review follow-up.")
 
