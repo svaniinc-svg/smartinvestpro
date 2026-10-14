@@ -15,25 +15,9 @@ import uuid
 
 st.set_page_config(page_title="Know the Deal Before You Invest", layout="wide")
 
-# Custom header avoids Streamlit/emoji rendering artifacts in the main title.
-st.markdown(
-    """
-    <div class="app-hero">
-        <div class="app-hero-heading">
-            <div class="app-house-badge" aria-hidden="true">
-                <svg viewBox="0 0 24 24" role="img">
-                    <path d="M3 11.2 12 4l9 7.2v8.3a.5.5 0 0 1-.5.5H15v-6H9v6H3.5a.5.5 0 0 1-.5-.5v-8.3Z" fill="none" stroke="currentColor" stroke-width="1.9" stroke-linejoin="round"/>
-                    <path d="M7 9.5V6.8h3" fill="none" stroke="currentColor" stroke-width="1.9" stroke-linecap="round"/>
-                </svg>
-            </div>
-            <div class="app-hero-title">Know the Deal Before You Invest</div>
-        </div>
-        <div class="app-hero-subtitle">Analyze Rentals &bull; Evaluate Flips &bull; Invest Smarter</div>
-    </div>
-    """,
-    unsafe_allow_html=True,
-)
-
+# Clean, simple app header — no icon, SVG, badge, or custom title container.
+st.title("Know the Deal Before You Invest")
+st.markdown("**Analyze Rentals • Evaluate Flips • Invest Smarter**")
 st.caption("No signup required. Run the numbers first. Join the investor deals list later if you want Charlotte-area opportunities and deal review follow-up.")
 
 # -------------------------
@@ -41,61 +25,6 @@ st.caption("No signup required. Run the numbers first. Join the investor deals l
 # -------------------------
 st.markdown("""
 <style>
-.app-hero {
-    padding: 0.35rem 0 0.65rem 0;
-    margin: 0;
-}
-.app-hero-heading {
-    display: flex;
-    align-items: center;
-    gap: 0.9rem;
-}
-.app-house-badge {
-    width: 3.15rem;
-    height: 3.15rem;
-    min-width: 3.15rem;
-    border-radius: 14px;
-    display: flex;
-    align-items: center;
-    justify-content: center;
-    background: linear-gradient(135deg, #eef7ff 0%, #e7f8ef 100%);
-    border: 1px solid rgba(49, 130, 206, 0.18);
-    color: #1769aa;
-    box-shadow: 0 5px 16px rgba(15, 23, 42, 0.08);
-}
-.app-house-badge svg {
-    width: 1.9rem;
-    height: 1.9rem;
-    display: block;
-}
-.app-hero-title {
-    font-size: clamp(2rem, 3.2vw, 3.25rem);
-    line-height: 1.12;
-    font-weight: 800;
-    letter-spacing: -0.025em;
-    margin: 0;
-    padding: 0;
-}
-.app-hero-subtitle {
-    font-size: 1.05rem;
-    font-weight: 600;
-    opacity: 0.78;
-    margin-top: 0.55rem;
-    margin-left: 4.05rem;
-}
-@media (max-width: 640px) {
-    .app-hero-heading { gap: 0.65rem; }
-    .app-house-badge {
-        width: 2.55rem;
-        height: 2.55rem;
-        min-width: 2.55rem;
-        border-radius: 11px;
-    }
-    .app-house-badge svg { width: 1.5rem; height: 1.5rem; }
-    .app-hero-subtitle { margin-left: 0; }
-}
-
-
 .block-container {padding-top: 1.4rem; padding-bottom: 3rem; max-width: 1450px;}
 div[data-testid="stRadio"] > div {gap: 1rem;}
 div[data-testid="stButton"] button, div[data-testid="stDownloadButton"] button {border-radius: 10px; font-weight: 700;}
