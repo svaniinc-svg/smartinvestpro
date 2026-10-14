@@ -14,7 +14,7 @@ import uuid
 
 
 st.set_page_config(page_title="Real Estate ROI Calculator", layout="wide")
-st.title("🏡 Smart Rental ROI Calculator + Investor Lead Funnel")
+st.title("🏡 Investment ROI Calculator")
 
 st.caption("No signup required. Run the numbers first. Join the investor deals list later if you want Charlotte-area opportunities and deal review follow-up.")
 
@@ -24,8 +24,7 @@ st.caption("No signup required. Run the numbers first. Join the investor deals l
 st.markdown("""
 <style>
 .block-container {padding-top: 1.4rem; padding-bottom: 3rem; max-width: 1450px;}
-div[data-testid="stRadio"] > div {gap: .55rem;}
-div[data-testid="stRadio"] label {background: rgba(120,120,120,.08); border: 1px solid rgba(120,120,120,.20); padding: .55rem .9rem; border-radius: 12px;}
+div[data-testid="stRadio"] > div {gap: 1rem;}
 div[data-testid="stButton"] button, div[data-testid="stDownloadButton"] button {border-radius: 10px; font-weight: 700;}
 .kpi-card {border-radius: 16px; padding: 16px 14px; min-height: 116px; border: 1px solid rgba(128,128,128,.18); box-shadow: 0 4px 14px rgba(0,0,0,.07); transition: transform .16s ease, box-shadow .16s ease;}
 .kpi-card:hover {transform: translateY(-3px); box-shadow: 0 8px 20px rgba(0,0,0,.12);}
@@ -37,6 +36,9 @@ div[data-testid="stButton"] button, div[data-testid="stDownloadButton"] button {
 .kpi-bad {background: rgba(239,68,68,.14); border-left: 6px solid #ef4444;}
 .kpi-neutral {background: rgba(59,130,246,.11); border-left: 6px solid #3b82f6;}
 .deal-banner {padding: 12px 16px; border-radius: 14px; margin: 8px 0 18px 0; font-weight: 700;}
+.result-panel {border:1px solid rgba(128,128,128,.18); border-radius:16px; padding:16px 18px; background:rgba(120,120,120,.045); margin:10px 0 14px 0;}
+.result-title {font-size:1rem; font-weight:800; margin-bottom:8px;}
+.result-line {font-size:.9rem; margin:5px 0; opacity:.9;}
 </style>
 """, unsafe_allow_html=True)
 
@@ -1516,25 +1518,42 @@ def render_fix_flip_calculator():
     _kpi_card(m4, "🏷️ Max Offer", _fmt_flip_metric("Max Offer", max_offer_val), offer_status, f"Target {target_profit_pct:.0f}% margin")
 
 
-    max_offer_cols = [k for k in metrics if k.startswith("Max Offer")]
-    if max_offer_cols:
-        c1, c2 = st.columns(2)
-        c1.metric(max_offer_cols[0], _fmt_flip_metric(max_offer_cols[0], metrics[max_offer_cols[0]]))
-        if len(max_offer_cols) > 1:
-            c2.metric(max_offer_cols[1], _fmt_flip_metric(max_offer_cols[1], metrics[max_offer_cols[1]]))
-
+    # Decision-oriented results below the four headline KPIs.
     if metrics["Net Profit"] < 0:
-        st.error("This flip is showing a projected loss based on your assumptions.")
+        st.error("🔴 Deal Assessment: Projected loss. Rework the purchase price, ARV, rehab, or financing assumptions.")
     elif metrics["Profit Margin"] is not None and metrics["Profit Margin"] < (target_profit_pct / 100.0):
-        st.warning("Projected profit is positive, but below your target profit margin.")
+        st.warning("🟡 Deal Assessment: Profitable, but below your target profit margin.")
     else:
-        st.success("This flip meets or exceeds your target profit margin based on the entered assumptions.")
+        st.success("🟢 Deal Assessment: Meets or exceeds your target profit margin based on the entered assumptions.")
 
-    display_df = pd.DataFrame([{"Metric": k, "Value": _fmt_flip_metric(k, v)} for k, v in metrics.items()])
-    def _style_flip_rows(row):
-        raw_val = metrics.get(row["Metric"])
-        return ["", "color:red;" if isinstance(raw_val, (int, float, np.number)) and raw_val < 0 else ""]
-    st.write(display_df.style.apply(_style_flip_rows, axis=1))
+    offer_gap = (max_offer_val - purchase_price) if isinstance(max_offer_val, (int, float, np.number)) else None
+    total_project = metrics.get("Total Project Cost")
+    total_rehab = metrics.get("Total Rehab")
+    holding_cost = metrics.get("Total Holding Costs")
+    sale_cost = metrics.get("Total Selling Costs")
+
+    st.markdown("#### Deal Decision")
+    left, right = st.columns(2)
+    with left:
+        gap_text = _fmt_money_for_text(abs(offer_gap)) if isinstance(offer_gap, (int, float, np.number)) else "N/A"
+        gap_msg = (f"Purchase price is {gap_text} below your target max offer." if isinstance(offer_gap, (int, float, np.number)) and offer_gap >= 0
+                   else f"Purchase price is {gap_text} above your target max offer." if isinstance(offer_gap, (int, float, np.number))
+                   else "Target max-offer comparison is unavailable.")
+        st.markdown(f'''<div class="result-panel"><div class="result-title">🏷️ Offer Position</div>
+        <div class="result-line">{gap_msg}</div>
+        <div class="result-line"><b>Purchase:</b> {_fmt_money_for_text(purchase_price)} &nbsp; • &nbsp; <b>Target Max:</b> {_fmt_money_for_text(max_offer_val)}</div></div>''', unsafe_allow_html=True)
+    with right:
+        st.markdown(f'''<div class="result-panel"><div class="result-title">🧱 Project Cost Snapshot</div>
+        <div class="result-line"><b>Total Project Cost:</b> {_fmt_money_for_text(total_project)}</div>
+        <div class="result-line"><b>Rehab:</b> {_fmt_money_for_text(total_rehab)} &nbsp; • &nbsp; <b>Holding:</b> {_fmt_money_for_text(holding_cost)}</div>
+        <div class="result-line"><b>Selling Costs:</b> {_fmt_money_for_text(sale_cost)}</div></div>''', unsafe_allow_html=True)
+
+    with st.expander("📋 View all Fix & Flip metrics"):
+        display_df = pd.DataFrame([{"Metric": k, "Value": _fmt_flip_metric(k, v)} for k, v in metrics.items()])
+        def _style_flip_rows(row):
+            raw_val = metrics.get(row["Metric"])
+            return ["", "color:red;" if isinstance(raw_val, (int, float, np.number)) and raw_val < 0 else ""]
+        st.write(display_df.style.apply(_style_flip_rows, axis=1))
 
     st.subheader("📋 Next Step")
     st.write("Want a second opinion on the repair budget, ARV, or offer price? Submit the property and I can review it.")
@@ -1566,9 +1585,10 @@ if "lead_captured" not in st.session_state:
 st.divider()
 
 analysis_type = st.radio(
-    "Investment Strategy",
+    "Choose calculator",
     ["🏘️ Rental", "🔨 Fix & Flip"],
-    horizontal=True
+    horizontal=True,
+    label_visibility="collapsed"
 )
 
 if analysis_type == "🔨 Fix & Flip":
@@ -1792,14 +1812,28 @@ if st.button("📊 Calculate ROI", use_container_width=True):
         _status_higher(cap, .06, .04) == "good",
         _status_higher(coc, .08, .05) == "good",
         _status_higher(dcr_kpi, 1.25, 1.0) == "good",
-        _status_lower(break_even, .80, .90) == "good",
     ])
     if good_count >= 4:
-        st.success(f"🟢 Deal Snapshot: Strong on {good_count}/4 core rental indicators based on the current assumptions.")
+        st.success(f"🟢 Deal Assessment: Strong — all {good_count}/4 core rental indicators are in the target range.")
     elif good_count >= 2:
-        st.warning(f"🟡 Deal Snapshot: Mixed — {good_count}/4 core rental indicators are in the strong range.")
+        st.warning(f"🟡 Deal Assessment: Mixed — {good_count}/4 core rental indicators are in the target range.")
     else:
-        st.error(f"🔴 Deal Snapshot: Only {good_count}/4 core rental indicators are in the strong range. Review price, rent, financing, or expenses.")
+        st.error(f"🔴 Deal Assessment: Weak — only {good_count}/4 core rental indicators are in the target range. Review price, rent, financing, or expenses.")
+
+    st.markdown("#### Investment Snapshot")
+    left, right = st.columns(2)
+    with left:
+        st.markdown(f'''<div class="result-panel"><div class="result-title">💵 Income & Risk</div>
+        <div class="result-line"><b>Annual Cash Flow:</b> {_fmt_money_for_text(annual_cf)}</div>
+        <div class="result-line"><b>Break-Even Occupancy:</b> {_fmt_pct_for_text(break_even)}</div>
+        <div class="result-line">Lower break-even occupancy provides more cushion against vacancy and operating changes.</div></div>''', unsafe_allow_html=True)
+    with right:
+        total_profit = metrics.get("Total Profit (hold)")
+        equity_hold = metrics.get("Equity at Hold")
+        st.markdown(f'''<div class="result-panel"><div class="result-title">📈 Hold & Exit</div>
+        <div class="result-line"><b>Hold ROI:</b> {_fmt_pct_for_text(hold_roi)}</div>
+        <div class="result-line"><b>Total Hold Profit:</b> {_fmt_money_for_text(total_profit)}</div>
+        <div class="result-line"><b>Equity at Hold:</b> {_fmt_money_for_text(equity_hold)}</div></div>''', unsafe_allow_html=True)
 
     st.subheader("📋 Detailed Rental Metrics")
     display_rows = []
