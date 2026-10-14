@@ -20,13 +20,13 @@ st.set_page_config(page_title="Know the Deal Before You Invest", layout="wide")
 st.markdown(
     """
     <div style="margin:0 0 1.8rem 0; padding:0;">
-        <div style="font-size:2.55rem; line-height:1.12; font-weight:800; margin:0 0 1.15rem 0; padding:0;">
+        <div style="color:#FFFFFF !important; font-family:Arial,Helvetica,sans-serif; font-size:2.55rem; line-height:1.12; font-weight:800; margin:0 0 1.15rem 0; padding:0;">
             Know the Deal Before You Invest
         </div>
-        <div style="font-size:1.05rem; font-weight:700; margin:0 0 1.35rem 0; padding:0;">
+        <div style="color:#FFFFFF !important; font-size:1.05rem; font-weight:700; margin:0 0 1.35rem 0; padding:0;">
             Analyze Rentals • Evaluate Flips • Invest Smarter
         </div>
-        <div style="font-size:0.96rem; opacity:0.70; line-height:1.5; margin:0; padding:0;">
+        <div style="color:#B8BEC9 !important; font-size:0.96rem; line-height:1.5; margin:0; padding:0;">
             No signup required. Run the numbers first. Join the investor deals list later if you want Charlotte-area opportunities and deal review follow-up.
         </div>
     </div>
